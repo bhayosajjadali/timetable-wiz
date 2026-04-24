@@ -90,11 +90,10 @@ export function getPeriodDuration(period: number, timings: Timings): number {
  * non-break slots (so a break between slot 4 and slot 6 means slot 6 → P5).
  */
 export function getPeriodLabel(period: number, timings: Timings): string {
-  // Custom mode: count non-break entries up to and including this slot
+  // Custom mode: count non-break slots up to this period
   if (timings.periodTimingMode === 'custom' && timings.customPeriodTimings.length > 0) {
     const custom = timings.customPeriodTimings.find((c) => c.period === period);
     if (custom?.isBreak) return 'Break';
-    // Count non-break slots up to this period
     let count = 0;
     for (const ct of timings.customPeriodTimings) {
       if (!ct.isBreak) count++;
@@ -104,7 +103,6 @@ export function getPeriodLabel(period: number, timings: Timings): string {
   }
   // Equal mode
   if (period === timings.breakAfterPeriod) return 'Break';
-  // Count non-break slots up to this period
   let count = 0;
   for (let i = 1; i <= period; i++) {
     if (i !== timings.breakAfterPeriod) count++;

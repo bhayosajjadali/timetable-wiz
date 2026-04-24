@@ -277,36 +277,31 @@ function printHtml(htmlContent: string, title: string) {
   }, 400);
 }
 
-/* ===== PDF Download Helper ===== */
+/* ===== PDF Download Helper — uses print dialog (works on all devices) ===== */
 
 function usePdfDownload() {
   const { toast } = useToast();
   const [isGenerating, setIsGenerating] = useState(false);
 
-  const downloadPdf = async (htmlContent: string, filename: string, orientation: 'portrait' | 'landscape' = 'portrait') => {
+  const downloadPdf = async (htmlContent: string, filename: string, _orientation: 'portrait' | 'landscape' = 'portrait') => {
     setIsGenerating(true);
     try {
-      const html2pdf = (await import('html2pdf.js')).default;
-      const container = document.createElement('div');
-      container.innerHTML = htmlContent;
-      document.body.appendChild(container);
-
-      const opt = {
-        margin: [10, 8, 14, 8],
-        filename: filename,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, letterRendering: true, logging: false },
-        jsPDF: { unit: 'mm', format: 'a4', orientation },
-        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
-      };
-
-      await html2pdf().set(opt).from(container).save();
-      document.body.removeChild(container);
-      toast({ title: 'PDF downloaded', description: `${filename} has been saved.` });
+      const win = window.open('', '_blank');
+      if (!win) {
+        toast({ title: 'Popup blocked', description: 'Please allow popups and try again.', variant: 'destructive' });
+        return;
+      }
+      win.document.write(htmlContent);
+      win.document.title = filename.replace('.pdf', '');
+      win.document.close();
+      setTimeout(() => {
+        win.print();
+        setIsGenerating(false);
+      }, 600);
+      toast({ title: 'Print dialog opened', description: 'Use "Save as PDF" in the print dialog to download.' });
     } catch (err) {
       console.error('PDF generation failed:', err);
       toast({ title: 'PDF generation failed', description: 'An error occurred while generating the PDF.', variant: 'destructive' });
-    } finally {
       setIsGenerating(false);
     }
   };
@@ -1642,8 +1637,10 @@ function esc(str: string): string {
 
 function buildClassTimetableHtml(schoolName: string, className: string, sectionName: string, timings: any, entries: any[], teachers: any[], classes: any[], sections: any[], subjects: any[], classId: string, sectionId: string, showBreaks: boolean, showEmpty: boolean): string {
   const activeDays = timings.days;
-  let filteredEntries = entries.filter((e: any) => e.classId === classId && e.sectionId === sectionId);
-  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const filteredEntries = entries.filter((e: any) => e.classId === classId && e.sectionId === sectionId);
+  const genTime = new Date().toLocaleString('en-PK', { dateStyle: 'medium', timeStyle: 'short' });
+  const reportTitle = 'Class Timetable';
+  const subtitle = `${className} \u2014 Section ${sectionName}`;
 
   const getT = (id: string) => teachers.find((t: any) => t.id === id);
   const getS = (id: string) => subjects.find((s: any) => s.id === id);
@@ -1654,18 +1651,17 @@ function buildClassTimetableHtml(schoolName: string, className: string, sectionN
     if (isBreak && !showBreaks) continue;
     const time = getPeriodTime(p, timings);
     const label = getPeriodLabel(p, timings);
-    const rowClass = isBreak ? ' style="background:#FFF8E1"' : '';
-
-    rows += `<tr${rowClass}><td class="tp">${esc(label)}<br><span class="tt">${esc(time)}</span></td>`;
+    const rowClass = isBreak ? ' class="brk"' : '';
+    rows += `<tr${rowClass}><td class="tp"><span class="pl">${esc(label)}</span><span class="tt-time">${esc(time)}</span></td>`;
     for (const day of activeDays) {
-      if (isBreak) { rows += '<td class="tb">&#9749;</td>'; continue; }
+      if (isBreak) { rows += '<td class="tb">&#9749; Break</td>'; continue; }
       const entry = filteredEntries.find((e: any) => e.day === day && e.period === p);
       if (entry) {
         const subj = getS(entry.subjectId);
         const tchr = getT(entry.teacherId);
-        rows += `<td class="tf"><b>${esc(subj?.shortName || '?')}</b><br><span class="tn">${esc(tchr?.name || '?')}</span></td>`;
+        rows += `<td class="tf"><b>${esc(subj?.shortName || '?')}</b><span class="tn">${esc(tchr?.name || '?')}</span></td>`;
       } else if (showEmpty) {
-        rows += '<td class="te">—</td>';
+        rows += '<td class="te">\u2014</td>';
       } else {
         rows += '<td></td>';
       }
@@ -1674,28 +1670,91 @@ function buildClassTimetableHtml(schoolName: string, className: string, sectionN
   }
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-@page{size:A4 portrait;margin:12mm 10mm 16mm 10mm}
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:9px;color:#1D1D1F}
-.rh{text-align:center;padding-bottom:8px;margin-bottom:8px;border-bottom:2px solid #007AFF}
-.sn{font-size:16px;font-weight:700}.rt{font-size:12px;font-weight:600;color:#333;margin-top:2px}.rs{font-size:10px;color:#666;margin-top:1px}
-table{width:100%;border-collapse:collapse}th,td{border:1px solid #D1D1D6;padding:3px;text-align:center;vertical-align:middle}
-th{background:#F5F5F7;font-size:8px;font-weight:600}
-.tp{background:#FAFAFA;font-size:8px;width:65px}.tt{font-size:6.5px;color:#86868B}
-.tf{font-size:9px}.tn{font-size:7px;color:#555}.tb{font-size:10px;color:#FF9500}.te{color:#C7C7CC}
-.rf{margin-top:10px;padding-top:6px;border-top:1px solid #E5E5EA;display:flex;justify-content:space-between;font-size:7px;color:#86868B}
-@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+
+@page {
+  size: A4 portrait;
+  margin: 18mm 12mm 18mm 12mm;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+  font-size: 9px;
+  color: #1D1D1F;
+}
+/* ── Page header (visible, printed at top of document) ── */
+.page-header {
+  text-align: center;
+  padding-bottom: 8px;
+  margin-bottom: 10px;
+  border-bottom: 2.5px solid #007AFF;
+}
+.page-header .school-name { font-size: 16px; font-weight: 700; color: #1D1D1F; letter-spacing: -0.3px; }
+.page-header .report-title { font-size: 12px; font-weight: 600; color: #333; margin-top: 3px; }
+.page-header .report-sub { font-size: 10px; color: #555; margin-top: 2px; }
+/* ── Footer table (fixed at bottom of every printed page) ── */
+.page-footer {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  display: table;
+  width: 100%;
+  border-top: 1px solid #D1D1D6;
+  padding-top: 4px;
+  font-size: 7px;
+  color: #86868B;
+}
+.page-footer .f-left   { display: table-cell; text-align: left;   width: 33%; }
+.page-footer .f-center { display: table-cell; text-align: center; width: 34%; }
+.page-footer .f-right  { display: table-cell; text-align: right;  width: 33%; }
+/* ── Timetable grid ── */
+table.tt { width: 100%; border-collapse: collapse; }
+table.tt th, table.tt td { border: 1px solid #D1D1D6; padding: 3px 2px; text-align: center; vertical-align: middle; }
+table.tt th { background: #E8EAF6; font-size: 8px; font-weight: 700; color: #1a237e; }
+.tp { background: #FAFAFA; font-size: 8px; width: 68px; min-width: 68px; }
+.pl { display: block; font-weight: 700; color: #1D1D1F; }
+.tt-time { display: block; font-size: 6.5px; color: #86868B; margin-top: 1px; }
+.tf { font-size: 9px; }
+.tn { display: block; font-size: 7px; color: #555; margin-top: 1px; }
+.tb { font-size: 9px; color: #E65100; background: #FFF3E0 !important; font-style: italic; }
+.te { color: #C7C7CC; }
+.brk td { background: #FFF3E0 !important; }
+/* ── Free periods ── */
+.sr { display: flex; gap: 12px; margin-bottom: 12px; justify-content: center; }
+.si { text-align: center; padding: 8px 18px; background: #E8EAF6; border-radius: 8px; border: 1px solid #C5CAE9; }
+.sn2 { display: block; font-size: 20px; font-weight: 700; color: #283593; }
+.sl { display: block; font-size: 8px; color: #86868B; margin-top: 2px; }
+.db { margin-bottom: 8px; border: 1px solid #E5E5EA; border-radius: 6px; overflow: hidden; }
+.dh { background: #F5F5F7; padding: 5px 8px; font-weight: 700; font-size: 10px; border-bottom: 1px solid #E5E5EA; }
+.fc { font-weight: 400; font-size: 8px; color: #283593; margin-left: 5px; }
+.di { display: flex; flex-wrap: wrap; gap: 5px; padding: 6px 8px; }
+.fi { padding: 3px 8px; background: #E8F5E9; border: 1px solid #A5D6A7; border-radius: 4px; font-size: 8px; font-weight: 600; color: #2E7D32; }
+@media print {
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .page-footer { position: fixed; bottom: 0; }
+}
+
 </style></head><body>
-<div class="rh"><div class="sn">${esc(schoolName)}</div><div class="rt">Class Timetable</div><div class="rs">${esc(className)} — Section ${esc(sectionName)}</div></div>
-<table><thead><tr><th>Day / Period</th>${activeDays.map((d: string) => `<th>${esc(d)}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>
-<div class="rf"><span>${esc(today)}</span><span>Generated by Timetable Manager</span></div>
+  <div class="page-header">
+    <div class="school-name">${esc(schoolName)}</div>
+    <div class="report-title">${esc(reportTitle)}</div>
+    <div class="report-sub">${esc(subtitle)}</div>
+  </div>
+  <div class="page-footer">
+    <span class="f-left">${esc(genTime)}</span>
+    <span class="f-center">${esc(schoolName)} &mdash; ${esc(reportTitle)}</span>
+    <span class="f-right">Page: 1 of 1</span>
+  </div>
+  <table class="tt">
+    <thead><tr><th>Day / Period</th>${activeDays.map((d: string) => `<th>${esc(d)}</th>`).join('')}</tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
 </body></html>`;
 }
 
 function buildTeacherScheduleHtml(schoolName: string, teacherName: string, timings: any, entries: any[], teachers: any[], classes: any[], sections: any[], subjects: any[], teacherId: string, showBreaks: boolean, showEmpty: boolean): string {
   const activeDays = timings.days;
-  let filteredEntries = entries.filter((e: any) => e.teacherId === teacherId);
-  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const filteredEntries = entries.filter((e: any) => e.teacherId === teacherId);
+  const genTime = new Date().toLocaleString('en-PK', { dateStyle: 'medium', timeStyle: 'short' });
+  const reportTitle = 'Teacher Schedule';
 
   const getS = (id: string) => subjects.find((s: any) => s.id === id);
   const getC = (id: string) => classes.find((c: any) => c.id === id);
@@ -1707,19 +1766,18 @@ function buildTeacherScheduleHtml(schoolName: string, teacherName: string, timin
     if (isBreak && !showBreaks) continue;
     const time = getPeriodTime(p, timings);
     const label = getPeriodLabel(p, timings);
-    const rowClass = isBreak ? ' style="background:#FFF8E1"' : '';
-
-    rows += `<tr${rowClass}><td class="tp">${esc(label)}<br><span class="tt">${esc(time)}</span></td>`;
+    const rowClass = isBreak ? ' class="brk"' : '';
+    rows += `<tr${rowClass}><td class="tp"><span class="pl">${esc(label)}</span><span class="tt-time">${esc(time)}</span></td>`;
     for (const day of activeDays) {
-      if (isBreak) { rows += '<td class="tb">&#9749;</td>'; continue; }
+      if (isBreak) { rows += '<td class="tb">&#9749; Break</td>'; continue; }
       const entry = filteredEntries.find((e: any) => e.day === day && e.period === p);
       if (entry) {
         const subj = getS(entry.subjectId);
         const cls = getC(entry.classId);
         const sec = getSec(entry.sectionId);
-        rows += `<td class="tf"><b>${esc(subj?.shortName || '?')}</b><br><span class="tn">${esc(cls?.name || '')}-${esc(sec?.name || '')}</span></td>`;
+        rows += `<td class="tf"><b>${esc(subj?.shortName || '?')}</b><span class="tn">${esc(cls?.name || '')}-${esc(sec?.name || '')}</span></td>`;
       } else if (showEmpty) {
-        rows += '<td class="te">—</td>';
+        rows += '<td class="te">\u2014</td>';
       } else {
         rows += '<td></td>';
       }
@@ -1728,28 +1786,91 @@ function buildTeacherScheduleHtml(schoolName: string, teacherName: string, timin
   }
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-@page{size:A4 portrait;margin:12mm 10mm 16mm 10mm}
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:9px;color:#1D1D1F}
-.rh{text-align:center;padding-bottom:8px;margin-bottom:8px;border-bottom:2px solid #007AFF}
-.sn{font-size:16px;font-weight:700}.rt{font-size:12px;font-weight:600;color:#333;margin-top:2px}.rs{font-size:10px;color:#666;margin-top:1px}
-table{width:100%;border-collapse:collapse}th,td{border:1px solid #D1D1D6;padding:3px;text-align:center;vertical-align:middle}
-th{background:#F5F5F7;font-size:8px;font-weight:600}
-.tp{background:#FAFAFA;font-size:8px;width:65px}.tt{font-size:6.5px;color:#86868B}
-.tf{font-size:9px}.tn{font-size:7px;color:#555}.tb{font-size:10px;color:#FF9500}.te{color:#C7C7CC}
-.rf{margin-top:10px;padding-top:6px;border-top:1px solid #E5E5EA;display:flex;justify-content:space-between;font-size:7px;color:#86868B}
-@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+
+@page {
+  size: A4 portrait;
+  margin: 18mm 12mm 18mm 12mm;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+  font-size: 9px;
+  color: #1D1D1F;
+}
+/* ── Page header (visible, printed at top of document) ── */
+.page-header {
+  text-align: center;
+  padding-bottom: 8px;
+  margin-bottom: 10px;
+  border-bottom: 2.5px solid #007AFF;
+}
+.page-header .school-name { font-size: 16px; font-weight: 700; color: #1D1D1F; letter-spacing: -0.3px; }
+.page-header .report-title { font-size: 12px; font-weight: 600; color: #333; margin-top: 3px; }
+.page-header .report-sub { font-size: 10px; color: #555; margin-top: 2px; }
+/* ── Footer table (fixed at bottom of every printed page) ── */
+.page-footer {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  display: table;
+  width: 100%;
+  border-top: 1px solid #D1D1D6;
+  padding-top: 4px;
+  font-size: 7px;
+  color: #86868B;
+}
+.page-footer .f-left   { display: table-cell; text-align: left;   width: 33%; }
+.page-footer .f-center { display: table-cell; text-align: center; width: 34%; }
+.page-footer .f-right  { display: table-cell; text-align: right;  width: 33%; }
+/* ── Timetable grid ── */
+table.tt { width: 100%; border-collapse: collapse; }
+table.tt th, table.tt td { border: 1px solid #D1D1D6; padding: 3px 2px; text-align: center; vertical-align: middle; }
+table.tt th { background: #E8EAF6; font-size: 8px; font-weight: 700; color: #1a237e; }
+.tp { background: #FAFAFA; font-size: 8px; width: 68px; min-width: 68px; }
+.pl { display: block; font-weight: 700; color: #1D1D1F; }
+.tt-time { display: block; font-size: 6.5px; color: #86868B; margin-top: 1px; }
+.tf { font-size: 9px; }
+.tn { display: block; font-size: 7px; color: #555; margin-top: 1px; }
+.tb { font-size: 9px; color: #E65100; background: #FFF3E0 !important; font-style: italic; }
+.te { color: #C7C7CC; }
+.brk td { background: #FFF3E0 !important; }
+/* ── Free periods ── */
+.sr { display: flex; gap: 12px; margin-bottom: 12px; justify-content: center; }
+.si { text-align: center; padding: 8px 18px; background: #E8EAF6; border-radius: 8px; border: 1px solid #C5CAE9; }
+.sn2 { display: block; font-size: 20px; font-weight: 700; color: #283593; }
+.sl { display: block; font-size: 8px; color: #86868B; margin-top: 2px; }
+.db { margin-bottom: 8px; border: 1px solid #E5E5EA; border-radius: 6px; overflow: hidden; }
+.dh { background: #F5F5F7; padding: 5px 8px; font-weight: 700; font-size: 10px; border-bottom: 1px solid #E5E5EA; }
+.fc { font-weight: 400; font-size: 8px; color: #283593; margin-left: 5px; }
+.di { display: flex; flex-wrap: wrap; gap: 5px; padding: 6px 8px; }
+.fi { padding: 3px 8px; background: #E8F5E9; border: 1px solid #A5D6A7; border-radius: 4px; font-size: 8px; font-weight: 600; color: #2E7D32; }
+@media print {
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .page-footer { position: fixed; bottom: 0; }
+}
+
 </style></head><body>
-<div class="rh"><div class="sn">${esc(schoolName)}</div><div class="rt">Teacher Schedule</div><div class="rs">${esc(teacherName)}</div></div>
-<table><thead><tr><th>Day / Period</th>${activeDays.map((d: string) => `<th>${esc(d)}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>
-<div class="rf"><span>${esc(today)}</span><span>Generated by Timetable Manager</span></div>
+  <div class="page-header">
+    <div class="school-name">${esc(schoolName)}</div>
+    <div class="report-title">${esc(reportTitle)}</div>
+    <div class="report-sub">${esc(teacherName)}</div>
+  </div>
+  <div class="page-footer">
+    <span class="f-left">${esc(genTime)}</span>
+    <span class="f-center">${esc(schoolName)} &mdash; ${esc(reportTitle)}</span>
+    <span class="f-right">Page: 1 of 1</span>
+  </div>
+  <table class="tt">
+    <thead><tr><th>Day / Period</th>${activeDays.map((d: string) => `<th>${esc(d)}</th>`).join('')}</tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
 </body></html>`;
 }
 
 function buildFreePeriodsHtml(schoolName: string, teacherName: string, timings: any, entries: any[], teachers: any[], classes: any[], sections: any[], subjects: any[], teacherId: string): string {
   const activeDays = timings.days;
   const teacherEntries = entries.filter((e: any) => e.teacherId === teacherId);
-  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const genTime = new Date().toLocaleString('en-PK', { dateStyle: 'medium', timeStyle: 'short' });
+  const reportTitle = 'Free Periods Analysis';
 
   const freePeriods: { day: string; period: number; time: string }[] = [];
   activeDays.forEach((day: string) => {
@@ -1764,42 +1885,100 @@ function buildFreePeriodsHtml(schoolName: string, teacherName: string, timings: 
   const grouped = new Map<string, typeof freePeriods>();
   freePeriods.forEach((fp) => { const list = grouped.get(fp.day) || []; list.push(fp); grouped.set(fp.day, list); });
 
-  const nonBreak = timings.periodsPerDay - (timings.periodTimingMode === 'custom' ? timings.customPeriodTimings.filter((pt: any) => pt.isBreak).length : (timings.breakAfterPeriod > 0 ? 1 : 0));
-  const totalTeaching = activeDays.length * nonBreak;
+  const nonBreakCount = timings.periodTimingMode === 'custom'
+    ? timings.customPeriodTimings.filter((pt: any) => !pt.isBreak).length
+    : timings.periodsPerDay - (timings.breakAfterPeriod > 0 ? 1 : 0);
+  const totalTeaching = activeDays.length * nonBreakCount;
   const pct = totalTeaching > 0 ? Math.round((freePeriods.length / totalTeaching) * 100) : 0;
 
   let dayBlocks = '';
   activeDays.forEach((day: string) => {
     const dayFree = grouped.get(day);
     if (!dayFree || dayFree.length === 0) return;
-    let items = dayFree.map((fp) => `<span class="fi">${getPeriodLabel(fp.period, timings)} (${esc(fp.time)})</span>`).join('');
+    const items = dayFree.map((fp) => `<span class="fi">${getPeriodLabel(fp.period, timings)} (${esc(fp.time)})</span>`).join('');
     dayBlocks += `<div class="db"><div class="dh">${esc(day)} <span class="fc">${dayFree.length} free</span></div><div class="di">${items}</div></div>`;
   });
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-@page{size:A4 portrait;margin:12mm 10mm 16mm 10mm}
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:10px;color:#1D1D1F}
-.rh{text-align:center;padding-bottom:8px;margin-bottom:10px;border-bottom:2px solid #007AFF}
-.sn{font-size:16px;font-weight:700}.rt{font-size:12px;font-weight:600;color:#333;margin-top:2px}.rs{font-size:10px;color:#666;margin-top:1px}
-.sr{display:flex;gap:14px;margin-bottom:12px;justify-content:center}
-.si{text-align:center;padding:8px 16px;background:#F5F5F7;border-radius:8px;border:1px solid #E5E5EA}
-.sn2{display:block;font-size:18px;font-weight:700;color:#007AFF}.sl{display:block;font-size:8px;color:#86868B;margin-top:2px}
-.db{margin-bottom:8px;border:1px solid #E5E5EA;border-radius:6px;overflow:hidden}
-.dh{background:#F5F5F7;padding:5px 8px;font-weight:600;font-size:10px;border-bottom:1px solid #E5E5EA}
-.fc{font-weight:400;font-size:8px;color:#007AFF;margin-left:4px}
-.di{display:flex;flex-wrap:wrap;gap:5px;padding:6px 8px}
-.fi{padding:3px 8px;background:#E8F5E9;border:1px solid #C8E6C9;border-radius:4px;font-size:8px;font-weight:600;color:#2E7D32}
-.rf{margin-top:12px;padding-top:6px;border-top:1px solid #E5E5EA;display:flex;justify-content:space-between;font-size:7px;color:#86868B}
-@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+
+@page {
+  size: A4 portrait;
+  margin: 18mm 12mm 18mm 12mm;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+  font-size: 9px;
+  color: #1D1D1F;
+}
+/* ── Page header (visible, printed at top of document) ── */
+.page-header {
+  text-align: center;
+  padding-bottom: 8px;
+  margin-bottom: 10px;
+  border-bottom: 2.5px solid #007AFF;
+}
+.page-header .school-name { font-size: 16px; font-weight: 700; color: #1D1D1F; letter-spacing: -0.3px; }
+.page-header .report-title { font-size: 12px; font-weight: 600; color: #333; margin-top: 3px; }
+.page-header .report-sub { font-size: 10px; color: #555; margin-top: 2px; }
+/* ── Footer table (fixed at bottom of every printed page) ── */
+.page-footer {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  display: table;
+  width: 100%;
+  border-top: 1px solid #D1D1D6;
+  padding-top: 4px;
+  font-size: 7px;
+  color: #86868B;
+}
+.page-footer .f-left   { display: table-cell; text-align: left;   width: 33%; }
+.page-footer .f-center { display: table-cell; text-align: center; width: 34%; }
+.page-footer .f-right  { display: table-cell; text-align: right;  width: 33%; }
+/* ── Timetable grid ── */
+table.tt { width: 100%; border-collapse: collapse; }
+table.tt th, table.tt td { border: 1px solid #D1D1D6; padding: 3px 2px; text-align: center; vertical-align: middle; }
+table.tt th { background: #E8EAF6; font-size: 8px; font-weight: 700; color: #1a237e; }
+.tp { background: #FAFAFA; font-size: 8px; width: 68px; min-width: 68px; }
+.pl { display: block; font-weight: 700; color: #1D1D1F; }
+.tt-time { display: block; font-size: 6.5px; color: #86868B; margin-top: 1px; }
+.tf { font-size: 9px; }
+.tn { display: block; font-size: 7px; color: #555; margin-top: 1px; }
+.tb { font-size: 9px; color: #E65100; background: #FFF3E0 !important; font-style: italic; }
+.te { color: #C7C7CC; }
+.brk td { background: #FFF3E0 !important; }
+/* ── Free periods ── */
+.sr { display: flex; gap: 12px; margin-bottom: 12px; justify-content: center; }
+.si { text-align: center; padding: 8px 18px; background: #E8EAF6; border-radius: 8px; border: 1px solid #C5CAE9; }
+.sn2 { display: block; font-size: 20px; font-weight: 700; color: #283593; }
+.sl { display: block; font-size: 8px; color: #86868B; margin-top: 2px; }
+.db { margin-bottom: 8px; border: 1px solid #E5E5EA; border-radius: 6px; overflow: hidden; }
+.dh { background: #F5F5F7; padding: 5px 8px; font-weight: 700; font-size: 10px; border-bottom: 1px solid #E5E5EA; }
+.fc { font-weight: 400; font-size: 8px; color: #283593; margin-left: 5px; }
+.di { display: flex; flex-wrap: wrap; gap: 5px; padding: 6px 8px; }
+.fi { padding: 3px 8px; background: #E8F5E9; border: 1px solid #A5D6A7; border-radius: 4px; font-size: 8px; font-weight: 600; color: #2E7D32; }
+@media print {
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .page-footer { position: fixed; bottom: 0; }
+}
+
 </style></head><body>
-<div class="rh"><div class="sn">${esc(schoolName)}</div><div class="rt">Free Periods Analysis</div><div class="rs">${esc(teacherName)}</div></div>
-<div class="sr">
-  <div class="si"><span class="sn2">${freePeriods.length}</span><span class="sl">Free Periods</span></div>
-  <div class="si"><span class="sn2">${totalTeaching}</span><span class="sl">Total Periods</span></div>
-  <div class="si"><span class="sn2">${pct}%</span><span class="sl">Free</span></div>
-</div>
-${dayBlocks}
-<div class="rf"><span>${esc(today)}</span><span>Generated by Timetable Manager</span></div>
+  <div class="page-header">
+    <div class="school-name">${esc(schoolName)}</div>
+    <div class="report-title">${esc(reportTitle)}</div>
+    <div class="report-sub">${esc(teacherName)}</div>
+  </div>
+  <div class="page-footer">
+    <span class="f-left">${esc(genTime)}</span>
+    <span class="f-center">${esc(schoolName)} &mdash; ${esc(reportTitle)}</span>
+    <span class="f-right">Page: 1 of 1</span>
+  </div>
+  <div class="sr">
+    <div class="si"><span class="sn2">${freePeriods.length}</span><span class="sl">Free Periods</span></div>
+    <div class="si"><span class="sn2">${totalTeaching}</span><span class="sl">Total Periods</span></div>
+    <div class="si"><span class="sn2">${pct}%</span><span class="sl">Free Rate</span></div>
+  </div>
+  ${dayBlocks}
 </body></html>`;
 }
+
