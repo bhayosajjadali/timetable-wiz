@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useRef, useCallback } from 'react';
+import { useState, useMemo, useRef, useCallback, createContext, useContext } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -15,6 +16,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import { useTimetableStore } from '@/lib/store';
 import { getSubjectColor, getPeriodTime, isBreakPeriod, getPeriodLabel } from '@/lib/timetable-utils';
 import { useToast } from '@/hooks/use-toast';
@@ -32,29 +42,156 @@ import {
   BarChart3,
   Hash,
   Scissors,
+  Settings2,
+  RotateCcw,
+  ChevronsUpDown,
+  Check,
 } from 'lucide-react';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  usePrintSettings,
+  DEFAULT_PRINT_SETTINGS,
+  type PrintSettings,
+} from '@/hooks/usePrintSettings';
 
 type ReportType = 'class-timetable' | 'teacher-schedule' | 'free-periods' | 'teacher-period-count' | 'cutout-timetables';
 
-export function ReportsTab() {
-  const [reportType, setReportType] = useState<ReportType>('class-timetable');
-  const [selectedClass, setSelectedClass] = useState('');
-  const [selectedSection, setSelectedSection] = useState('');
-  const [selectedTeacher, setSelectedTeacher] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showFilters, setShowFilters] = useState(true);
+const ALL_REPORT_TYPES: ReportType[] = ['class-timetable', 'teacher-schedule', 'free-periods', 'teacher-period-count', 'cutout-timetables'];
+const REPORT_TYPE_LABELS: Record<ReportType, string> = {
+  'class-timetable': 'Class Timetable',
+  'teacher-schedule': 'Teacher Schedule',
+  'free-periods': 'Free Periods',
+  'teacher-period-count': 'Period Count',
+  'cutout-timetables': 'Cut-out Timetables',
+};
 
-  // Filter states
-  const [filterReportTypes, setFilterReportTypes] = useState<ReportType[]>(['class-timetable', 'teacher-schedule', 'free-periods', 'teacher-period-count', 'cutout-timetables']);
-  const [filterIncludeBreaks, setFilterIncludeBreaks] = useState(true);
-  const [filterEmptySlots, setFilterEmptySlots] = useState(true);
+/* Share filter settings across reports via context */
+const ReportFilterCtx = createContext({
+  showBreaks: true,
+  showEmpty: true,
+  searchQuery: '',
+});
+
+/* ====================================================================
+   Reusable CheckDropdown — Popover with checkboxes + "All" toggle
+   ==================================================================== */
+
+function CheckDropdown({
+  label,
+  options,
+  selected,
+  onToggle,
+  onSelectAll,
+  allLabel = 'All',
+  icon: Icon,
+  searchable = false,
+}: {
+  label: string;
+  options: { value: string; label: string }[];
+  selected: string[];
+  onToggle: (value: string) => void;
+  onSelectAll: () => void;
+  allLabel?: string;
+  icon?: React.ComponentType<{ className?: string }>;
+  searchable?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState('');
+  const isAll = selected.length === options.length && options.length > 0;
+  const isNone = selected.length === 0;
+  const displayLabel = isAll ? allLabel : isNone ? label : `${selected.length} selected`;
+
+  const filteredOpts = searchable && filter.trim()
+    ? options.filter((o) => o.label.toLowerCase().includes(filter.toLowerCase()))
+    : options;
+
+  return (
+    <Popover open={open} onOpenChange={(v) => { setOpen(v); if (!v) setFilter(''); }}>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm" className="h-8 gap-1.5">
+          {Icon && <Icon className="h-3.5 w-3.5" />}
+          <span className="text-xs font-medium">{displayLabel}</span>
+          {!isAll && !isNone && (
+            <Badge variant="secondary" className="h-4 min-w-4 px-1 text-[10px]">{selected.length}</Badge>
+          )}
+          <ChevronsUpDown className="h-3 w-3 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-56 p-1" align="end">
+        <div className="space-y-0.5">
+          {/* All toggle */}
+          <button
+            onClick={onSelectAll}
+            className="flex items-center gap-2 w-full px-2 py-1.5 rounded-sm hover:bg-muted transition-colors text-left"
+          >
+            <Checkbox checked={isAll ? true : isNone ? false : 'indeterminate'} />
+            <span className="text-sm font-medium">{allLabel}</span>
+          </button>
+          <Separator className="my-1" />
+          {searchable && (
+            <div className="relative px-1 pb-1">
+              <Input
+                placeholder="Filter..."
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                className="h-7 text-xs pl-7"
+              />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+            </div>
+          )}
+          <div className="max-h-60 overflow-y-auto">
+            {filteredOpts.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => onToggle(opt.value)}
+                className="flex items-center gap-2 w-full px-2 py-1.5 rounded-sm hover:bg-muted transition-colors text-left"
+              >
+                <Checkbox checked={selected.includes(opt.value)} />
+                <span className="text-sm truncate">{opt.label}</span>
+                {selected.includes(opt.value) && <Check className="h-3 w-3 ml-auto text-[#007AFF]" />}
+              </button>
+            ))}
+            {filteredOpts.length === 0 && (
+              <p className="px-2 py-3 text-xs text-muted-foreground text-center">No results</p>
+            )}
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/* ====================================================================
+   ReportsTab — All report types shown via dropdown-checkbox filters
+   ==================================================================== */
+
+export function ReportsTab() {
+  const [activeTypes, setActiveTypes] = useState<ReportType[]>([...ALL_REPORT_TYPES]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showBreaks, setShowBreaks] = useState(true);
+  const [showEmpty, setShowEmpty] = useState(true);
 
   const { classes, sections, teachers, timings } = useTimetableStore();
-
   const availableClasses = classes.filter((c) => c.sectionIds.length > 0);
-  const availableSections = selectedClass
-    ? classes.find((c) => c.id === selectedClass)?.sectionIds || []
-    : [];
+
+  // Per-report-type item selections
+  const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
+  const [selectedTeacherIdsForSchedule, setSelectedTeacherIdsForSchedule] = useState<string[]>([]);
+  const [selectedTeacherIdsForFree, setSelectedTeacherIdsForFree] = useState<string[]>([]);
+
+  // Toggle helpers
+  const toggleType = (type: ReportType) =>
+    setActiveTypes((prev) => prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]);
+  const selectAllTypes = () => setActiveTypes(activeTypes.length === ALL_REPORT_TYPES.length ? [] : [...ALL_REPORT_TYPES]);
+
+  const toggleItem = (setter: React.Dispatch<React.SetStateAction<string[]>>) => (value: string) =>
+    setter((prev) => prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]);
+  const selectAllItems = (setter: React.Dispatch<React.SetStateAction<string[]>>, all: string[]) => () =>
+    setter((prev) => prev.length === all.length ? [] : [...all]);
 
   const filteredClasses = useMemo(() => {
     if (!searchQuery.trim()) return availableClasses;
@@ -68,232 +205,225 @@ export function ReportsTab() {
     return teachers.filter((t) => t.name.toLowerCase().includes(q) || t.shortName.toLowerCase().includes(q));
   }, [teachers, searchQuery]);
 
-  const toggleReportType = (type: ReportType) => {
-    setFilterReportTypes((prev) =>
-      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
-    );
-  };
-
-  const handleReportChange = (v: string) => {
-    setReportType(v as ReportType);
-    setSelectedClass('');
-    setSelectedSection('');
-    setSelectedTeacher('');
-  };
+  const classOpts = filteredClasses.map((c) => ({ value: c.id, label: c.name }));
+  const teacherOpts = filteredTeachers.map((t) => ({ value: t.id, label: `${t.name} (${t.shortName})` }));
+  const typeOpts = ALL_REPORT_TYPES.map((t) => ({ value: t, label: REPORT_TYPE_LABELS[t] }));
 
   return (
-    <div className="space-y-6">
-      {/* Filters & Search Card */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5" />
-              Reports
-            </CardTitle>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowFilters(!showFilters)}
-            >
-              <Filter className="h-4 w-4 mr-1.5" />
-              {showFilters ? 'Hide' : 'Show'} Filters
-            </Button>
-          </div>
-          <CardDescription>Generate, customize, and download reports</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Search bar */}
-          <div className="relative">
-            <Input
-              placeholder="Search by name..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
-            />
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
-                <span className="text-xs">Clear</span>
-              </button>
-            )}
-          </div>
+    <ReportFilterCtx.Provider value={{ showBreaks, showEmpty, searchQuery }}>
+    <div className="space-y-4">
+      {/* ── Compact top toolbar ── */
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-2 mr-auto">
+          <FileText className="h-5 w-5 text-muted-foreground" />
+          <span className="font-semibold text-sm">Reports</span>
+        </div>
 
-          {showFilters && (
-            <>
-              <div className="space-y-3">
-                <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Report Types</Label>
-                <div className="flex flex-wrap gap-4">
-                  {([
-                    ['class-timetable', 'Class Timetable'],
-                    ['teacher-schedule', 'Teacher Schedule'],
-                    ['free-periods', 'Free Periods'],
-                    ['teacher-period-count', 'Period Count'],
-                    ['cutout-timetables', 'Cut-out Timetables'],
-                  ] as [ReportType, string][]).map(([type, label]) => (
-                    <label key={type} className="flex items-center gap-2 cursor-pointer">
-                      <Checkbox
-                        checked={filterReportTypes.includes(type)}
-                        onCheckedChange={() => toggleReportType(type)}
-                      />
-                      <span className="text-sm">{label}</span>
-                    </label>
-                  ))}
-                </div>
+        {/* Report types dropdown-checkbox */}
+        <CheckDropdown
+          label="Report Types"
+          icon={Filter}
+          options={typeOpts}
+          selected={activeTypes}
+          onToggle={toggleType}
+          onSelectAll={selectAllTypes}
+          allLabel="All Reports"
+        />
+
+        {/* Show Breaks / Empty toggles */}
+        <label className="flex items-center gap-1.5 cursor-pointer rounded-md border px-2.5 py-1 hover:bg-muted/50 transition-colors">
+          <Checkbox checked={showBreaks} onCheckedChange={(v) => setShowBreaks(!!v)} className="h-3.5 w-3.5" />
+          <span className="text-xs">Breaks</span>
+        </label>
+        <label className="flex items-center gap-1.5 cursor-pointer rounded-md border px-2.5 py-1 hover:bg-muted/50 transition-colors">
+          <Checkbox checked={showEmpty} onCheckedChange={(v) => setShowEmpty(!!v)} className="h-3.5 w-3.5" />
+          <span className="text-xs">Empty</span>
+        </label>
+
+        {/* Search */}
+        <div className="relative w-48">
+          <Input
+            placeholder="Search..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="h-8 text-xs pl-7"
+          />
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+        </div>
+      </div>
+
+      {/* ── Report Sections ── */}
+
+      {/* Class Timetable */}
+      {activeTypes.includes('class-timetable') && (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <CardTitle className="text-base flex items-center gap-2">Class Timetables</CardTitle>
+                <CardDescription>Select classes to generate timetables</CardDescription>
               </div>
-
-              <Separator />
-
-              <div className="flex flex-wrap gap-4">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <Checkbox checked={filterIncludeBreaks} onCheckedChange={(v) => setFilterIncludeBreaks(!!v)} />
-                  <span className="text-sm">Show Break Periods</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <Checkbox checked={filterEmptySlots} onCheckedChange={(v) => setFilterEmptySlots(!!v)} />
-                  <span className="text-sm">Show Empty Slots</span>
-                </label>
-              </div>
-
-              <Separator />
-            </>
-          )}
-
-          {/* Report selection */}
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="space-y-2">
-              <Label>Report Type</Label>
-              <Select value={reportType} onValueChange={handleReportChange}>
-                <SelectTrigger className="w-full sm:w-[220px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {filterReportTypes.includes('class-timetable') && (
-                    <SelectItem value="class-timetable">Class Timetable</SelectItem>
-                  )}
-                  {filterReportTypes.includes('teacher-schedule') && (
-                    <SelectItem value="teacher-schedule">Teacher Schedule</SelectItem>
-                  )}
-                  {filterReportTypes.includes('free-periods') && (
-                    <SelectItem value="free-periods">Free Periods</SelectItem>
-                  )}
-                  {filterReportTypes.includes('teacher-period-count') && (
-                    <SelectItem value="teacher-period-count">Period Count</SelectItem>
-                  )}
-                  {filterReportTypes.includes('cutout-timetables') && (
-                    <SelectItem value="cutout-timetables">Cut-out Timetables</SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
+              <CheckDropdown
+                label="Classes"
+                options={classOpts}
+                selected={selectedClassIds}
+                onToggle={toggleItem(setSelectedClassIds)}
+                onSelectAll={selectAllItems(setSelectedClassIds, classOpts.map((o) => o.value))}
+                allLabel="All Classes"
+                searchable
+              />
             </div>
-
-            {reportType === 'class-timetable' && (
-              <>
-                <div className="space-y-2">
-                  <Label>Class</Label>
-                  <Select value={selectedClass} onValueChange={(v) => { setSelectedClass(v); setSelectedSection(''); }}>
-                    <SelectTrigger className="w-full sm:w-[180px]">
-                      <SelectValue placeholder="Select class" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {filteredClasses.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Section</Label>
-                  <Select value={selectedSection} onValueChange={setSelectedSection} disabled={!selectedClass}>
-                    <SelectTrigger className="w-full sm:w-[180px]">
-                      <SelectValue placeholder={selectedClass ? 'Select section' : 'Select class first'} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableSections.map((sid) => {
-                        const section = sections.find((s) => s.id === sid);
-                        return <SelectItem key={sid} value={sid}>Section {section?.name}</SelectItem>;
-                      })}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {selectedClassIds.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-6">Select one or more classes above, or choose &quot;All Classes&quot;.</p>
             )}
+            {(selectedClassIds.length > 0 ? filteredClasses.filter((c) => selectedClassIds.includes(c.id)) : filteredClasses).map((cls) =>
+              cls.sectionIds.map((sid) => {
+                const sec = sections.find((s) => s.id === sid);
+                return sec ? (
+                  <ClassTimetableReport
+                    key={`${cls.id}-${sid}`}
+                    classId={cls.id}
+                    sectionId={sid}
+                    showBreaks={showBreaks}
+                    showEmpty={showEmpty}
+                  />
+                ) : null;
+              })
+            )}
+          </CardContent>
+        </Card>
+      )}
 
-            {(reportType === 'teacher-schedule' || reportType === 'free-periods') && (
-              <div className="space-y-2">
-                <Label>Teacher</Label>
-                <Select value={selectedTeacher} onValueChange={setSelectedTeacher}>
-                  <SelectTrigger className="w-full sm:w-[220px]">
-                    <SelectValue placeholder="Select teacher" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {filteredTeachers.map((t) => (
-                      <SelectItem key={t.id} value={t.id}>{t.name} ({t.shortName})</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+      {/* Teacher Schedule */}
+      {activeTypes.includes('teacher-schedule') && (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <CardTitle className="text-base flex items-center gap-2"><UserCheck className="h-4 w-4" />Teacher Schedules</CardTitle>
+                <CardDescription>Weekly teaching schedules</CardDescription>
               </div>
+              <CheckDropdown
+                label="Teachers"
+                options={teacherOpts}
+                selected={selectedTeacherIdsForSchedule}
+                onToggle={toggleItem(setSelectedTeacherIdsForSchedule)}
+                onSelectAll={selectAllItems(setSelectedTeacherIdsForSchedule, teacherOpts.map((o) => o.value))}
+                allLabel="All Teachers"
+                searchable
+              />
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {selectedTeacherIdsForSchedule.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-6">Select one or more teachers above, or choose &quot;All Teachers&quot;.</p>
             )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {reportType === 'class-timetable' && selectedClass && selectedSection && (
-        <ClassTimetableReport classId={selectedClass} sectionId={selectedSection} showBreaks={filterIncludeBreaks} showEmpty={filterEmptySlots} />
+            {(selectedTeacherIdsForSchedule.length > 0 ? filteredTeachers.filter((t) => selectedTeacherIdsForSchedule.includes(t.id)) : filteredTeachers).map((t) => (
+              <TeacherScheduleReport key={t.id} teacherId={t.id} showBreaks={showBreaks} showEmpty={showEmpty} />
+            ))}
+          </CardContent>
+        </Card>
       )}
 
-      {reportType === 'teacher-schedule' && selectedTeacher && (
-        <TeacherScheduleReport teacherId={selectedTeacher} showBreaks={filterIncludeBreaks} showEmpty={filterEmptySlots} />
+      {/* Free Periods */}
+      {activeTypes.includes('free-periods') && (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <CardTitle className="text-base flex items-center gap-2"><Clock className="h-4 w-4" />Free Periods</CardTitle>
+                <CardDescription>Analyze teacher availability</CardDescription>
+              </div>
+              <CheckDropdown
+                label="Teachers"
+                options={teacherOpts}
+                selected={selectedTeacherIdsForFree}
+                onToggle={toggleItem(setSelectedTeacherIdsForFree)}
+                onSelectAll={selectAllItems(setSelectedTeacherIdsForFree, teacherOpts.map((o) => o.value))}
+                allLabel="All Teachers"
+                searchable
+              />
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {selectedTeacherIdsForFree.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-6">Select one or more teachers above, or choose &quot;All Teachers&quot;.</p>
+            )}
+            {(selectedTeacherIdsForFree.length > 0 ? filteredTeachers.filter((t) => selectedTeacherIdsForFree.includes(t.id)) : filteredTeachers).map((t) => (
+              <FreePeriodsReport key={t.id} teacherId={t.id} />
+            ))}
+          </CardContent>
+        </Card>
       )}
 
-      {reportType === 'free-periods' && selectedTeacher && (
-        <FreePeriodsReport teacherId={selectedTeacher} />
-      )}
-
-      {reportType === 'teacher-period-count' && (
+      {/* Period Count */}
+      {activeTypes.includes('teacher-period-count') && (
         <TeacherPeriodCountReport />
       )}
 
-      {reportType === 'cutout-timetables' && (
+      {/* Cut-out Timetables */}
+      {activeTypes.includes('cutout-timetables') && (
         <CutoutTimetablesReport />
       )}
     </div>
+    </ReportFilterCtx.Provider>
   );
 }
 
-/* ===== Print/PDF Helper — iframe-based, works on Android WebView ===== */
+/* ====================================================================
+   Iframe-based Print Helper
+   --------------------------------------------------------------------
+   Replaces the old window.open() approach.  Writes the report HTML
+   into a hidden <iframe> using srcdoc, then calls print() on the
+   iframe's contentWindow.  This guarantees:
+     1. The correct report layout is rendered (not a generic page).
+     2. 100% format consistency between Print and Download PDF
+        (both paths call the same code).
+     3. No popup-blocker issues (iframes are not blocked).
+   ==================================================================== */
 
-function printOrSave(htmlContent: string, title: string) {
-  // Remove any existing print iframe
-  const existing = document.getElementById('__print_iframe__');
-  if (existing) existing.remove();
+function printViaIframe(htmlContent: string, title: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    // Remove any leftover iframe from a previous print
+    const existing = document.getElementById('__report_print_iframe__');
+    if (existing) existing.remove();
 
-  const iframe = document.createElement('iframe');
-  iframe.id = '__print_iframe__';
-  iframe.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;border:none;z-index:99999;background:white;';
-  document.body.appendChild(iframe);
+    const iframe = document.createElement('iframe');
+    iframe.id = '__report_print_iframe__';
+    iframe.setAttribute('aria-hidden', 'true');
+    iframe.style.cssText =
+      'position:fixed;left:-99999px;top:-99999px;width:0;height:0;border:none;opacity:0;pointer-events:none;';
+    document.body.appendChild(iframe);
 
-  const doc = iframe.contentDocument || iframe.contentWindow?.document;
-  if (!doc) return;
-  doc.open();
-  doc.write(htmlContent);
-  doc.title = title;
-  doc.close();
+    // Use srcdoc to set the content atomically (avoids about:blank flash)
+    iframe.srcdoc = htmlContent;
 
-  setTimeout(() => {
-    try {
-      iframe.contentWindow?.focus();
-      iframe.contentWindow?.print();
-    } catch (e) {
-      console.error('Print failed:', e);
-    }
-    // Remove iframe after print dialog closes
-    setTimeout(() => iframe.remove(), 2000);
-  }, 500);
+    iframe.onload = () => {
+      try {
+        const iw = iframe.contentWindow;
+        if (!iw) { iframe.remove(); reject(new Error('Iframe contentWindow unavailable')); return; }
+        // Give the browser a moment to finish rendering (fonts, layout)
+        setTimeout(() => {
+          try {
+            iw.focus();
+            iw.print();
+            resolve();
+          } catch (e) { reject(e); }
+          finally {
+            // Clean up after the print dialog closes
+            setTimeout(() => { iframe.remove(); }, 60_000);
+          }
+        }, 350);
+      } catch (err) { iframe.remove(); reject(err); }
+    };
+
+    iframe.onerror = () => { iframe.remove(); reject(new Error('Iframe failed to load')); };
+  });
 }
+
+/* ===== usePdfDownload — iframe-based, consistent with print ===== */
 
 function usePdfDownload() {
   const { toast } = useToast();
@@ -302,17 +432,153 @@ function usePdfDownload() {
   const downloadPdf = async (htmlContent: string, filename: string, _orientation: 'portrait' | 'landscape' = 'portrait') => {
     setIsGenerating(true);
     try {
-      printOrSave(htmlContent, filename.replace('.pdf', ''));
-      toast({ title: 'Print dialog opened', description: 'Choose "Save as PDF" to download.' });
+      await printViaIframe(htmlContent, filename.replace('.pdf', ''));
+      toast({
+        title: 'Print dialog opened',
+        description: 'Choose "Save as PDF" as the destination to download the report as a color PDF.',
+      });
     } catch (err) {
-      console.error('PDF failed:', err);
-      toast({ title: 'PDF generation failed', description: 'An error occurred.', variant: 'destructive' });
+      console.error('PDF generation failed:', err);
+      toast({
+        title: 'Print failed',
+        description: 'An error occurred while preparing the report. Please try again.',
+        variant: 'destructive',
+      });
     } finally {
       setIsGenerating(false);
     }
   };
 
   return { downloadPdf, isGenerating };
+}
+
+/* ====================================================================
+   Print Settings Dialog
+   --------------------------------------------------------------------
+   Reusable dialog component that wraps every report's Print /
+   Download buttons.  Customisations are session-persistent via
+   the parent hook.
+   ==================================================================== */
+
+function PrintSettingsDialog({
+  settings,
+  onUpdate,
+  onReset,
+  children,
+}: {
+  settings: PrintSettings;
+  onUpdate: (partial: Partial<PrintSettings>) => void;
+  onReset: () => void;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const isDefault =
+    settings.orientation === DEFAULT_PRINT_SETTINGS.orientation &&
+    settings.sheetsPerPage === DEFAULT_PRINT_SETTINGS.sheetsPerPage &&
+    settings.headerContent === DEFAULT_PRINT_SETTINGS.headerContent &&
+    settings.footerContent === DEFAULT_PRINT_SETTINGS.footerContent;
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>{children}</DialogTrigger>
+      <DialogContent className="sm:max-w-[460px]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Settings2 className="h-4 w-4" />
+            Print Settings
+          </DialogTitle>
+          <DialogDescription>
+            Customize how reports are printed and downloaded. Settings persist for this session only.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-5 py-2">
+          {/* Orientation */}
+          <div className="space-y-2">
+            <Label>Page Orientation</Label>
+            <Select
+              value={settings.orientation}
+              onValueChange={(v) => onUpdate({ orientation: v as 'portrait' | 'landscape' })}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="portrait">Portrait (default)</SelectItem>
+                <SelectItem value="landscape">Landscape</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-[10px] text-muted-foreground">
+              {settings.orientation === 'portrait' ? 'Vertical A4 layout — ideal for timetables' : 'Horizontal A4 layout — ideal for wide tables'}
+            </p>
+          </div>
+
+          {/* Sheets per page */}
+          <div className="space-y-2">
+            <Label>Pages per Sheet (N-up)</Label>
+            <Select
+              value={String(settings.sheetsPerPage)}
+              onValueChange={(v) => onUpdate({ sheetsPerPage: Number(v) })}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1">1 page per sheet</SelectItem>
+                <SelectItem value="2">2 pages per sheet</SelectItem>
+                <SelectItem value="4">4 pages per sheet (2 x 2)</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-[10px] text-muted-foreground">
+              Fit multiple report pages on a single printed sheet
+            </p>
+          </div>
+
+          <Separator />
+
+          {/* Custom header */}
+          <div className="space-y-2">
+            <Label>Custom Header</Label>
+            <Textarea
+              placeholder="Optional text to appear in the report header (e.g. school motto, academic year)"
+              value={settings.headerContent}
+              onChange={(e) => onUpdate({ headerContent: e.target.value })}
+              rows={2}
+              className="text-sm"
+            />
+            <p className="text-[10px] text-muted-foreground">
+              Leave blank to use the default header
+            </p>
+          </div>
+
+          {/* Custom footer */}
+          <div className="space-y-2">
+            <Label>Custom Footer</Label>
+            <Textarea
+              placeholder="Optional text to appear in the report footer (e.g. principal signature, contact info)"
+              value={settings.footerContent}
+              onChange={(e) => onUpdate({ footerContent: e.target.value })}
+              rows={2}
+              className="text-sm"
+            />
+            <p className="text-[10px] text-muted-foreground">
+              Leave blank to use the default footer (date + page number)
+            </p>
+          </div>
+        </div>
+
+        <DialogFooter className="flex justify-between">
+          <Button variant="ghost" size="sm" onClick={onReset} disabled={isDefault}>
+            <RotateCcw className="h-3.5 w-3.5 mr-1" />
+            Reset Defaults
+          </Button>
+          <Button size="sm" onClick={() => setOpen(false)}>
+            Done
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 /* ===== Teacher Period Count Report ===== */
@@ -325,6 +591,7 @@ function TeacherPeriodCountReport() {
   const { toast } = useToast();
   const { downloadPdf, isGenerating } = usePdfDownload();
   const reportRef = useRef<HTMLDivElement>(null);
+  const { settings: printSettings, updateSettings, resetSettings } = usePrintSettings();
 
   const activeDays = timings.days;
   const [selectedDays, setSelectedDays] = useState<string[]>([...activeDays]);
@@ -366,10 +633,6 @@ function TeacherPeriodCountReport() {
   }, [teachers, entries, activeDays, timings, selectedDays, subjects, classes, sections]);
 
   const filteredSelectedDays = activeDays.filter((d) => selectedDays.includes(d));
-  const totalPeriodsPossible = filteredSelectedDays.length * activeDays.reduce((sum) => {
-    // count non-break periods
-    return sum; // we'll compute below
-  }, 0);
 
   const nonBreakPeriodsCount = useMemo(() => {
     let count = 0;
@@ -381,31 +644,30 @@ function TeacherPeriodCountReport() {
 
   const maxPossiblePerTeacher = filteredSelectedDays.length * nonBreakPeriodsCount;
 
+  // Effective orientation: print settings override if changed from default
+  const effectiveOrientation = (printSettings.orientation !== DEFAULT_PRINT_SETTINGS.orientation)
+    ? printSettings.orientation
+    : orientation;
+
   // Build print-ready HTML for the period count report
   const buildReportHtml = useCallback(() => {
     const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-    const isLandscape = orientation === 'landscape';
-    const pageW = isLandscape ? '297mm' : '210mm';
-    const pageH = isLandscape ? '210mm' : '297mm';
+    const isLandscape = effectiveOrientation === 'landscape';
+    const s = printSettings;
 
     const teachersPerPage = tablesPerPage === 1
       ? (isLandscape ? 20 : 14)
       : Math.max(1, Math.floor((isLandscape ? 20 : 14) / tablesPerPage));
 
-    // If tablesPerPage > 1, we want multiple tables side by side
-    // For simplicity, tablesPerPage=1 means one full table; >1 means side-by-side mini tables
     const fontSize = tablesPerPage === 1 ? (isLandscape ? '8px' : '7px') : '6px';
     const headerFontSize = tablesPerPage === 1 ? (isLandscape ? '7px' : '6.5px') : '5.5px';
     const cellPad = tablesPerPage === 1 ? '2px 3px' : '1px 2px';
-    const rowHeight = tablesPerPage === 1 ? 'auto' : '16px';
 
-    // Sort teachers by total (descending) for the report
     const sorted = [...teacherData].sort((a, b) => b.totalForSelectedDays - a.totalForSelectedDays);
 
     let tablesHtml = '';
 
     if (tablesPerPage === 1) {
-      // Single full table
       let tableRows = '';
       sorted.forEach((td) => {
         const t = td.teacher;
@@ -420,13 +682,12 @@ function TeacherPeriodCountReport() {
         }
         tableRows += `<td class="td-total"><strong>${td.totalForSelectedDays}</strong></td>`;
         if (detailMode === 'show-periods') {
-          // Add a detail cell with periods info
           let detailParts: string[] = [];
           for (const day of filteredSelectedDays) {
             const periods = td.dayPeriods[day] || [];
             if (periods.length > 0) {
               const pList = periods.map((p) => getPeriodLabel(p.period, timings)).join(',');
-              detailParts.push(`${day.slice(0,3)}:${pList}`);
+              detailParts.push(`${day.slice(0, 3)}:${pList}`);
             }
           }
           tableRows += `<td class="td-detail">${detailParts.join(' | ')}</td>`;
@@ -450,7 +711,6 @@ function TeacherPeriodCountReport() {
       }
       tablesHtml += `</tr></thead><tbody>${tableRows}</tbody></table>`;
     } else {
-      // Multiple side-by-side tables
       const chunkSize = Math.max(1, Math.ceil(sorted.length / tablesPerPage));
       const chunks: typeof sorted[] = [];
       for (let i = 0; i < sorted.length; i += chunkSize) {
@@ -483,7 +743,7 @@ function TeacherPeriodCountReport() {
                 <th class="th-sno">#</th>
                 <th class="th-name">Teacher</th>`;
         for (const day of filteredSelectedDays) {
-          tablesHtml += `<th class="th-day">${esc(day.slice(0,3))}</th>`;
+          tablesHtml += `<th class="th-day">${esc(day.slice(0, 3))}</th>`;
         }
         tablesHtml += `<th class="th-total">Total</th></tr></thead>
               <tbody>${tableRows}</tbody>
@@ -492,70 +752,112 @@ function TeacherPeriodCountReport() {
       });
     }
 
-    const showPeriods = detailMode === 'show-periods';
     const daysLabel = filteredSelectedDays.length === activeDays.length
       ? 'All Days'
       : filteredSelectedDays.join(', ');
 
-    const genTime = new Date().toLocaleString('en-PK', { dateStyle: 'medium', timeStyle: 'short' });
-    return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-@page { size: A4 ${isLandscape ? 'landscape' : 'portrait'}; margin: 14mm 10mm 14mm 10mm; }
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: Arial, 'Helvetica Neue', sans-serif; font-size: ${fontSize}; color: #1a1a2e; }
-.rpt-header { text-align: center; padding-bottom: 7px; margin-bottom: 9px; border-bottom: 3px solid #1565C0; }
-.rpt-school { font-size: ${isLandscape ? '15pt' : '13pt'}; font-weight: 700; color: #0D47A1; }
-.rpt-title  { font-size: ${isLandscape ? '11pt' : '10pt'}; font-weight: 600; color: #1a1a2e; margin-top: 2px; }
-.rpt-sub    { font-size: ${headerFontSize}; color: #555; margin-top: 1px; }
-.pc-table { width: 100%; border-collapse: collapse; font-size: ${fontSize}; table-layout: fixed; }
-.pc-table th, .pc-table td { border: 1px solid #CFD8DC; padding: ${cellPad}; text-align: center; vertical-align: middle; }
-.pc-table thead th { background: #1565C0; color: #fff; font-size: ${headerFontSize}; font-weight: 700; }
-.pc-table thead .th-name { text-align: left; }
-.td-sno  { color: #78909C; font-size: ${headerFontSize}; width: 22px; }
-.td-name { text-align: left !important; font-weight: 500; }
-.td-short { font-weight: 600; }
-.td-num  { font-weight: 600; }
-.td-zero { background: #FFF3E0 !important; color: #E65100; }
-.td-full { background: #E8F5E9 !important; color: #2E7D32; }
-.td-total { background: #E3F2FD; font-weight: 700; color: #1565C0; }
-.td-detail { text-align: left !important; font-size: ${headerFontSize}; color: #555; }
-.table-chunk { padding: 0 3px; }
-.chunk-title { font-size: ${headerFontSize}; font-weight: 700; text-align: center; margin-bottom: 3px; color: #1565C0; border-bottom: 1px solid #90CAF9; padding-bottom: 2px; }
-.pc-summary { display: flex; gap: 10px; justify-content: center; margin-top: 10px; flex-wrap: wrap; }
-.pc-sum-item { text-align: center; padding: 5px 14px; background: #E3F2FD; border-radius: 6px; border: 1px solid #90CAF9; }
-.pc-sum-num { display: block; font-size: 14pt; font-weight: 700; color: #1565C0; }
-.pc-sum-lbl { display: block; font-size: ${headerFontSize}; color: #78909C; }
-.rpt-footer { margin-top: 10px; padding-top: 5px; border-top: 1px solid #B0BEC5; display: flex; justify-content: space-between; font-size: ${headerFontSize}; color: #78909C; }
-@media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
-</style></head><body>
-  <div class="rpt-header">
-    <div class="rpt-school">${esc(schoolName)}</div>
-    <div class="rpt-title">Teacher Period Count Report</div>
-    <div class="rpt-sub">${esc(daysLabel)} | Max ${maxPossiblePerTeacher} periods/teacher | ${teachers.length} teachers</div>
+    // Custom header / footer
+    const customHeaderHtml = s.headerContent
+      ? `<div class="custom-header">${esc(s.headerContent)}</div>`
+      : '';
+    const customFooterHtml = s.footerContent
+      ? `<div class="custom-footer">${esc(s.footerContent)}</div>`
+      : '';
+
+    // N-up CSS
+    const nupStyle = s.sheetsPerPage > 1
+      ? `body { columns: ${s.sheetsPerPage === 4 ? 2 : s.sheetsPerPage}; column-gap: 0; column-rule: none; }`
+      : '';
+
+    return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @page {
+    size: A4 ${isLandscape ? 'landscape' : 'portrait'};
+    margin: ${isLandscape ? '8mm 6mm 12mm 6mm' : '12mm 10mm 16mm 10mm'};
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; font-size: ${fontSize}; line-height: 1.3; color: #1D1D1F; background: #fff; }
+  ${nupStyle}
+
+  .report-header { text-align: center; padding-bottom: 6px; margin-bottom: 8px; border-bottom: 2px solid #007AFF; }
+  .school-name { font-size: ${isLandscape ? '16px' : '14px'}; font-weight: 700; color: #1D1D1F; }
+  .report-title { font-size: ${isLandscape ? '12px' : '11px'}; font-weight: 600; color: #333; margin-top: 2px; }
+  .report-subtitle { font-size: ${headerFontSize}; color: #666; margin-top: 1px; }
+  .custom-header { text-align: center; font-size: ${headerFontSize}; color: #555; font-style: italic; margin-bottom: 4px; }
+  .custom-footer { text-align: center; font-size: ${headerFontSize}; color: #555; font-style: italic; margin-top: 4px; }
+
+  .pc-table { width: 100%; border-collapse: collapse; font-size: ${fontSize}; table-layout: fixed; }
+  .pc-table th, .pc-table td { border: 1px solid #D1D1D6; padding: ${cellPad}; text-align: center; vertical-align: middle; }
+  .th-sno { width: 22px; background: #F5F5F7; font-size: ${headerFontSize}; font-weight: 600; }
+  .th-name { background: #F5F5F7; font-size: ${headerFontSize}; font-weight: 600; text-align: left !important; width: auto; }
+  .th-short { background: #F5F5F7; font-size: ${headerFontSize}; font-weight: 600; width: 40px; }
+  .th-day { background: #F5F5F7; font-size: ${headerFontSize}; font-weight: 600; }
+  .th-total { background: #007AFF; color: white; font-size: ${headerFontSize}; font-weight: 700; width: 36px; }
+  .th-detail { background: #F5F5F7; font-size: ${headerFontSize}; font-weight: 600; text-align: left !important; }
+
+  .td-sno { font-size: ${headerFontSize}; color: #86868B; }
+  .td-name { text-align: left !important; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .td-short { font-weight: 600; font-size: ${fontSize}; }
+  .td-num { font-weight: 600; font-size: ${fontSize}; }
+  .td-num.zero { background: #FFF3E0; color: #E65100; }
+  .td-num.full { background: #E8F5E9; color: #2E7D32; }
+  .td-total { background: #F0F5FF; font-size: ${fontSize}; }
+  .td-detail { text-align: left !important; font-size: ${headerFontSize}; color: #555; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: ${isLandscape ? '120px' : '80px'}; }
+
+  .table-chunk { padding: 0 4px; }
+  .chunk-title { font-size: ${headerFontSize}; font-weight: 600; text-align: center; margin-bottom: 3px; color: #333; }
+
+  .summary-bar { display: flex; gap: 16px; justify-content: center; margin-top: 8px; flex-wrap: wrap; }
+  .summary-item { text-align: center; padding: 4px 12px; background: #F5F5F7; border-radius: 6px; border: 1px solid #E5E5EA; }
+  .summary-num { display: block; font-size: 14px; font-weight: 700; color: #007AFF; }
+  .summary-label { display: block; font-size: ${headerFontSize}; color: #86868B; }
+
+  .report-footer { margin-top: 10px; padding-top: 6px; border-top: 1px solid #E5E5EA; display: flex; justify-content: space-between; font-size: ${headerFontSize}; color: #86868B; }
+
+  @media print {
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+  <div class="report-header">
+    <div class="school-name">${esc(schoolName)}</div>
+    <div class="report-title">Teacher Period Count Report</div>
+    <div class="report-subtitle">${esc(daysLabel)} | Max ${maxPossiblePerTeacher} periods/teacher | ${teachers.length} teachers</div>
+    ${customHeaderHtml}
   </div>
+
   ${tablesHtml}
-  <div class="pc-summary">
-    <div class="pc-sum-item"><span class="pc-sum-num">${teachers.length}</span><span class="pc-sum-lbl">Teachers</span></div>
-    <div class="pc-sum-item"><span class="pc-sum-num">${filteredSelectedDays.length}</span><span class="pc-sum-lbl">Days</span></div>
-    <div class="pc-sum-item"><span class="pc-sum-num">${maxPossiblePerTeacher}</span><span class="pc-sum-lbl">Max Periods</span></div>
-    <div class="pc-sum-item"><span class="pc-sum-num">${sorted.reduce((s: number, t: any) => s + t.totalForSelectedDays, 0)}</span><span class="pc-sum-lbl">Total Assigned</span></div>
+
+  <div class="summary-bar">
+    <div class="summary-item"><span class="summary-num">${teachers.length}</span><span class="summary-label">Teachers</span></div>
+    <div class="summary-item"><span class="summary-num">${filteredSelectedDays.length}</span><span class="summary-label">Days</span></div>
+    <div class="summary-item"><span class="summary-num">${maxPossiblePerTeacher}</span><span class="summary-label">Max Periods</span></div>
+    <div class="summary-item"><span class="summary-num">${sorted.reduce((sum, t) => sum + t.totalForSelectedDays, 0)}</span><span class="summary-label">Total Assigned</span></div>
   </div>
-  <div class="rpt-footer">
-    <span>${esc(genTime)}</span>
-    <span>${esc(schoolName)} \u2014 Teacher Period Count Report</span>
-    <span>Page: 1 of 1</span>
+
+  ${customFooterHtml}
+  <div class="report-footer">
+    <span>${esc(today)}</span>
+    <span>Generated by Timetable Manager</span>
+    <span>Page <span class="page-num"></span></span>
   </div>
-</body></html>`;
-  }, [teacherData, filteredSelectedDays, activeDays, orientation, tablesPerPage, detailMode, schoolName, nonBreakPeriodsCount, maxPossiblePerTeacher, teachers.length]);
+</body>
+</html>`;
+  }, [teacherData, filteredSelectedDays, activeDays, orientation, tablesPerPage, detailMode, schoolName, nonBreakPeriodsCount, maxPossiblePerTeacher, teachers.length, effectiveOrientation, printSettings]);
 
   const handlePrint = () => {
     const html = buildReportHtml();
-    printOrSave(html, 'Teacher_Period_Count');
+    printViaIframe(html, 'Teacher_Period_Count');
     toast({ title: 'Print dialog opened', description: 'Use the print dialog to print or save as PDF.' });
   };
 
   const handlePdf = async () => {
     const html = buildReportHtml();
-    await downloadPdf(html, `Period_Count_${new Date().toISOString().slice(0, 10)}.pdf`, orientation);
+    await downloadPdf(html, `Period_Count_${new Date().toISOString().slice(0, 10)}.pdf`, effectiveOrientation);
   };
 
   return (
@@ -673,8 +975,18 @@ body { font-family: Arial, 'Helvetica Neue', sans-serif; font-size: ${fontSize};
             </Button>
             <Button onClick={handlePdf} disabled={isGenerating}>
               {isGenerating ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Download className="h-4 w-4 mr-1.5" />}
-              Download PDF ({orientation === 'landscape' ? 'Landscape' : 'Portrait'})
+              Download PDF ({effectiveOrientation === 'landscape' ? 'Landscape' : 'Portrait'})
             </Button>
+            <PrintSettingsDialog
+              settings={printSettings}
+              onUpdate={updateSettings}
+              onReset={resetSettings}
+            >
+              <Button variant="outline" size="sm">
+                <Settings2 className="h-4 w-4 mr-1.5" />
+                Print Settings
+              </Button>
+            </PrintSettingsDialog>
           </div>
         </CardContent>
       </Card>
@@ -687,11 +999,11 @@ body { font-family: Arial, 'Helvetica Neue', sans-serif; font-size: ${fontSize};
               <div>
                 <CardTitle className="text-lg">Preview</CardTitle>
                 <CardDescription>
-                  {filteredSelectedDays.length} day{filteredSelectedDays.length !== 1 ? 's' : ''} selected | {teachers.length} teachers | {orientation} mode
+                  {filteredSelectedDays.length} day{filteredSelectedDays.length !== 1 ? 's' : ''} selected | {teachers.length} teachers | {effectiveOrientation} mode
                 </CardDescription>
               </div>
               <Badge variant="secondary">
-                {orientation === 'landscape' ? (tablesPerPage === 1 ? '~20' : `~${20 * tablesPerPage}`) : (tablesPerPage === 1 ? '~14' : `~${14 * tablesPerPage}`)} teachers/page
+                {effectiveOrientation === 'landscape' ? (tablesPerPage === 1 ? '~20' : `~${20 * tablesPerPage}`) : (tablesPerPage === 1 ? '~14' : `~${14 * tablesPerPage}`)} teachers/page
               </Badge>
             </div>
           </CardHeader>
@@ -803,18 +1115,31 @@ function ClassTimetableReport({ classId, sectionId, showBreaks, showEmpty }: { c
   const { entries, teachers, subjects, timings, schoolName, classes, sections } = useTimetableStore();
   const { toast } = useToast();
   const { downloadPdf, isGenerating } = usePdfDownload();
+  const { settings: printSettings, updateSettings, resetSettings } = usePrintSettings();
 
   const activeDays = timings.days;
   const cls = classes.find((c) => c.id === classId);
   const sec = sections.find((s) => s.id === sectionId);
 
   const handlePrint = () => {
-    toast({ title: 'Print', description: 'Use your browser\'s print function (Ctrl+P / Cmd+P) to print the report.' });
-    window.print();
+    const html = buildClassTimetableHtml(
+      schoolName, cls?.name || 'Class', sec?.name || '',
+      timings, entries, teachers, classes, sections, subjects,
+      classId, sectionId, showBreaks, showEmpty,
+      printSettings
+    );
+    printViaIframe(html, `${cls?.name || 'Class'}_Section_${sec?.name || ''}_Timetable`);
+    toast({ title: 'Print dialog opened', description: 'Use the print dialog to print or save as PDF.' });
   };
 
   const handlePdf = async () => {
-    await downloadPdf(buildClassTimetableHtml(schoolName, cls?.name || 'Class', sec?.name || '', timings, entries, teachers, classes, sections, subjects, classId, sectionId, showBreaks, showEmpty), `${cls?.name || 'Class'}_Section_${sec?.name || ''}_Timetable.pdf`);
+    const html = buildClassTimetableHtml(
+      schoolName, cls?.name || 'Class', sec?.name || '',
+      timings, entries, teachers, classes, sections, subjects,
+      classId, sectionId, showBreaks, showEmpty,
+      printSettings
+    );
+    await downloadPdf(html, `${cls?.name || 'Class'}_Section_${sec?.name || ''}_Timetable.pdf`, printSettings.orientation);
   };
 
   const visiblePeriods = useMemo(() => {
@@ -841,7 +1166,7 @@ function ClassTimetableReport({ classId, sectionId, showBreaks, showEmpty }: { c
             <CardTitle className="text-lg">{cls?.name} — Section {sec?.name}</CardTitle>
             <CardDescription>Weekly timetable report</CardDescription>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Button variant="outline" size="sm" onClick={handlePrint}>
               <Printer className="h-4 w-4 mr-1.5" />
               Print
@@ -850,6 +1175,12 @@ function ClassTimetableReport({ classId, sectionId, showBreaks, showEmpty }: { c
               {isGenerating ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Download className="h-4 w-4 mr-1.5" />}
               Download PDF
             </Button>
+            <PrintSettingsDialog settings={printSettings} onUpdate={updateSettings} onReset={resetSettings}>
+              <Button variant="outline" size="sm">
+                <Settings2 className="h-4 w-4 mr-1.5" />
+                Print Settings
+              </Button>
+            </PrintSettingsDialog>
           </div>
         </div>
       </CardHeader>
@@ -900,6 +1231,7 @@ function TeacherScheduleReport({ teacherId, showBreaks, showEmpty }: { teacherId
   const { entries, classes, sections, subjects, timings, schoolName, teachers } = useTimetableStore();
   const { toast } = useToast();
   const { downloadPdf, isGenerating } = usePdfDownload();
+  const { settings: printSettings, updateSettings, resetSettings } = usePrintSettings();
 
   const activeDays = timings.days;
   const teacher = teachers.find((t) => t.id === teacherId);
@@ -907,12 +1239,20 @@ function TeacherScheduleReport({ teacherId, showBreaks, showEmpty }: { teacherId
   const teacherEntries = useMemo(() => entries.filter((e) => e.teacherId === teacherId), [entries, teacherId]);
 
   const handlePrint = () => {
-    toast({ title: 'Print', description: 'Use your browser\'s print function (Ctrl+P / Cmd+P) to print the report.' });
-    window.print();
+    const html = buildTeacherScheduleHtml(
+      schoolName, teacher?.name || 'Teacher', timings, entries, teachers, classes, sections, subjects,
+      teacherId, showBreaks, showEmpty, printSettings
+    );
+    printViaIframe(html, `${teacher?.shortName || 'Teacher'}_Schedule`);
+    toast({ title: 'Print dialog opened', description: 'Use the print dialog to print or save as PDF.' });
   };
 
   const handlePdf = async () => {
-    await downloadPdf(buildTeacherScheduleHtml(schoolName, teacher?.name || 'Teacher', timings, entries, teachers, classes, sections, subjects, teacherId, showBreaks, showEmpty), `${teacher?.shortName || 'Teacher'}_Schedule.pdf`);
+    const html = buildTeacherScheduleHtml(
+      schoolName, teacher?.name || 'Teacher', timings, entries, teachers, classes, sections, subjects,
+      teacherId, showBreaks, showEmpty, printSettings
+    );
+    await downloadPdf(html, `${teacher?.shortName || 'Teacher'}_Schedule.pdf`, printSettings.orientation);
   };
 
   const visiblePeriods = useMemo(() => {
@@ -937,12 +1277,18 @@ function TeacherScheduleReport({ teacherId, showBreaks, showEmpty }: { teacherId
             <CardTitle className="text-lg flex items-center gap-2"><UserCheck className="h-4 w-4" />{teacher?.name}</CardTitle>
             <CardDescription>Weekly teaching schedule</CardDescription>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Button variant="outline" size="sm" onClick={handlePrint}><Printer className="h-4 w-4 mr-1.5" />Print</Button>
             <Button size="sm" onClick={handlePdf} disabled={isGenerating}>
               {isGenerating ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Download className="h-4 w-4 mr-1.5" />}
               Download PDF
             </Button>
+            <PrintSettingsDialog settings={printSettings} onUpdate={updateSettings} onReset={resetSettings}>
+              <Button variant="outline" size="sm">
+                <Settings2 className="h-4 w-4 mr-1.5" />
+                Print Settings
+              </Button>
+            </PrintSettingsDialog>
           </div>
         </div>
       </CardHeader>
@@ -992,6 +1338,7 @@ function FreePeriodsReport({ teacherId }: { teacherId: string }) {
   const { entries, timings, schoolName, teachers, classes, sections, subjects } = useTimetableStore();
   const { toast } = useToast();
   const { downloadPdf, isGenerating } = usePdfDownload();
+  const { settings: printSettings, updateSettings, resetSettings } = usePrintSettings();
 
   const activeDays = timings.days;
   const teacher = teachers.find((t) => t.id === teacherId);
@@ -1022,10 +1369,15 @@ function FreePeriodsReport({ teacherId }: { teacherId: string }) {
     : (timings.breakAfterPeriod > 0 ? 1 : 0);
   const totalPeriods = activeDays.length * (timings.periodsPerDay - breakCount);
 
-  const handlePrint = () => { toast({ title: 'Print', description: 'Use your browser\'s print function.' }); window.print(); };
+  const handlePrint = () => {
+    const html = buildFreePeriodsHtml(schoolName, teacher?.name || 'Teacher', timings, entries, teachers, classes, sections, subjects, teacherId, printSettings);
+    printViaIframe(html, `${teacher?.shortName || 'Teacher'}_Free_Periods`);
+    toast({ title: 'Print dialog opened', description: 'Use the print dialog to print or save as PDF.' });
+  };
 
   const handlePdf = async () => {
-    await downloadPdf(buildFreePeriodsHtml(schoolName, teacher?.name || 'Teacher', timings, entries, teachers, classes, sections, subjects, teacherId), `${teacher?.shortName || 'Teacher'}_Free_Periods.pdf`);
+    const html = buildFreePeriodsHtml(schoolName, teacher?.name || 'Teacher', timings, entries, teachers, classes, sections, subjects, teacherId, printSettings);
+    await downloadPdf(html, `${teacher?.shortName || 'Teacher'}_Free_Periods.pdf`, printSettings.orientation);
   };
 
   return (
@@ -1036,12 +1388,18 @@ function FreePeriodsReport({ teacherId }: { teacherId: string }) {
             <CardTitle className="text-lg flex items-center gap-2"><Clock className="h-4 w-4" />Free Periods — {teacher?.name}</CardTitle>
             <CardDescription>{totalFreePeriods} free period{totalFreePeriods !== 1 ? 's' : ''} out of {totalPeriods} total ({totalPeriods > 0 ? Math.round((totalFreePeriods / totalPeriods) * 100) : 0}% free)</CardDescription>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Button variant="outline" size="sm" onClick={handlePrint}><Printer className="h-4 w-4 mr-1.5" />Print</Button>
             <Button size="sm" onClick={handlePdf} disabled={isGenerating}>
               {isGenerating ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Download className="h-4 w-4 mr-1.5" />}
               Download PDF
             </Button>
+            <PrintSettingsDialog settings={printSettings} onUpdate={updateSettings} onReset={resetSettings}>
+              <Button variant="outline" size="sm">
+                <Settings2 className="h-4 w-4 mr-1.5" />
+                Print Settings
+              </Button>
+            </PrintSettingsDialog>
           </div>
         </div>
       </CardHeader>
@@ -1080,6 +1438,7 @@ function CutoutTimetablesReport() {
   const { entries, teachers, timings, schoolName, classes, sections, subjects } = useTimetableStore();
   const { toast } = useToast();
   const { downloadPdf, isGenerating } = usePdfDownload();
+  const { settings: printSettings, updateSettings, resetSettings } = usePrintSettings();
 
   const activeDays = timings.days;
   const [selectedTeacherIds, setSelectedTeacherIds] = useState<string[]>([]);
@@ -1096,7 +1455,6 @@ function CutoutTimetablesReport() {
   const selectAll = () => setSelectedTeacherIds(teachers.map((t) => t.id));
   const selectNone = () => setSelectedTeacherIds([]);
 
-  // Get non-break period numbers for this teacher
   const visiblePeriods = useMemo(() => {
     const periods: number[] = [];
     for (let p = 1; p <= timings.periodsPerDay; p++) {
@@ -1116,7 +1474,6 @@ function CutoutTimetablesReport() {
     return periods;
   }, [timings, showBreaks, showEmpty, activeDays, entries, selectedTeacherIds]);
 
-  // Build teacher schedule data for selected teachers
   const teacherSchedules = useMemo(() => {
     return selectedTeacherIds.map((teacherId) => {
       const teacher = teachers.find((t) => t.id === teacherId);
@@ -1150,8 +1507,8 @@ function CutoutTimetablesReport() {
   // Build print HTML
   const buildCutoutHtml = useCallback(() => {
     const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    const s = printSettings;
 
-    // Layout configurations based on tablesPerSheet
     const layouts: Record<number, { cols: number; rows: number; fontSize: string; headerFontSize: string; nameFontSize: string; cellPad: string; dayAbbrev: boolean }> = {
       1: { cols: 1, rows: 1, fontSize: '9px', headerFontSize: '8px', nameFontSize: '14px', cellPad: '3px 4px', dayAbbrev: false },
       2: { cols: 1, rows: 2, fontSize: '7px', headerFontSize: '6.5px', nameFontSize: '11px', cellPad: '2px 3px', dayAbbrev: true },
@@ -1163,32 +1520,27 @@ function CutoutTimetablesReport() {
     const layout = layouts[tablesPerSheet] || layouts[2];
     const { cols, rows, fontSize, headerFontSize, nameFontSize, cellPad, dayAbbrev } = layout;
 
-    // Grid CSS for the page
     const gridCols = cols === 1 ? '1fr' : `1fr 1fr`;
     const boxGap = tablesPerSheet <= 2 ? '12px' : tablesPerSheet <= 4 ? '8px' : '5px';
     const boxPadding = tablesPerSheet <= 2 ? '10px' : tablesPerSheet <= 4 ? '6px' : '4px';
 
-    // Group selected teachers into pages
     const perPage = cols * rows;
     const pages: typeof teacherSchedules[] = [];
     for (let i = 0; i < teacherSchedules.length; i += perPage) {
       pages.push(teacherSchedules.slice(i, i + perPage));
     }
 
-    // Build each teacher's box
     const buildTeacherBox = (item: NonNullable<typeof teacherSchedules[0]>) => {
       const { teacher, schedule } = item;
       const dayLabel = (d: string) => dayAbbrev ? d.slice(0, 3) : d;
 
       let tableHtml = '';
-      // Header row with days
       tableHtml += `<tr><th class="ct-corner"></th>`;
       for (const day of activeDays) {
         tableHtml += `<th class="ct-day">${esc(dayLabel(day))}</th>`;
       }
       tableHtml += `</tr>`;
 
-      // Period rows
       for (const period of visiblePeriods) {
         const isBreak = isBreakPeriod(period, timings);
         if (isBreak) {
@@ -1227,44 +1579,110 @@ function CutoutTimetablesReport() {
 
     const totalPages = pages.length;
 
-    const genTime = new Date().toLocaleString('en-PK', { dateStyle: 'medium', timeStyle: 'short' });
-    return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-@page { size: A4 portrait; margin: 8mm; }
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: Arial, 'Helvetica Neue', sans-serif; font-size: ${fontSize}; color: #1a1a2e; line-height: 1.2; }
-.rpt-header { text-align: center; padding-bottom: 5px; margin-bottom: 7px; border-bottom: 3px solid #1565C0; }
-.rpt-school { font-size: 12pt; font-weight: 700; color: #0D47A1; }
-.rpt-title  { font-size: 9pt; font-weight: 600; color: #1a1a2e; margin-top: 2px; }
-.ct-page { display: grid; grid-template-columns: ${gridCols}; gap: ${boxGap}; width: 100%; align-content: start; }
-.ct-box { border: 2px solid #1565C0; border-radius: 8px; padding: ${boxPadding}; page-break-inside: avoid; break-inside: avoid; background: #FAFAFE; }
-.ct-name { text-align: center; font-size: ${nameFontSize}; font-weight: 800; color: #0D47A1; margin-bottom: 4px; padding-bottom: 3px; border-bottom: 1.5px solid #90CAF9; }
-.ct-table { width: 100%; border-collapse: collapse; font-size: ${fontSize}; table-layout: fixed; }
-.ct-table th, .ct-table td { border: 1px solid #CFD8DC; padding: ${cellPad}; text-align: center; vertical-align: middle; }
-.ct-corner { width: 28px; background: #E3F2FD; font-size: ${headerFontSize}; font-weight: 700; }
-.ct-day { background: #1565C0; color: #fff; font-size: ${headerFontSize}; font-weight: 700; }
-.ct-period { background: #E3F2FD; font-size: ${headerFontSize}; font-weight: 700; color: #0D47A1; white-space: nowrap; }
-.ct-time { font-size: ${tablesPerSheet <= 2 ? '5px' : '4px'}; color: #78909C; font-weight: 400; }
-.ct-break { background: #FFF8E1 !important; font-size: ${headerFontSize}; color: #F57F17; font-style: italic; }
-.ct-cell { font-size: ${fontSize}; height: ${tablesPerSheet <= 2 ? '22px' : tablesPerSheet <= 4 ? '16px' : '12px'}; }
-.ct-filled { background: #F8F9FF; }
-.ct-filled strong { color: #1a237e; }
-.ct-empty { background: #FAFAFA; color: #CFD8DC; }
-.page-break { page-break-after: always; break-after: page; }
-.rpt-footer { margin-top: 6px; padding-top: 4px; border-top: 1px solid #B0BEC5; display: flex; justify-content: space-between; font-size: 7pt; color: #78909C; }
-@media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } .ct-box { border-color: #1565C0; } }
-</style></head><body>
-  <div class="rpt-header">
-    <div class="rpt-school">${esc(schoolName)}</div>
-    <div class="rpt-title">Individual Teacher Timetables</div>
+    // Custom header / footer
+    const customHeaderHtml = s.headerContent
+      ? `<div class="custom-header">${esc(s.headerContent)}</div>`
+      : '';
+    const customFooterHtml = s.footerContent
+      ? `<div class="custom-footer">${esc(s.footerContent)}</div>`
+      : '';
+
+    return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @page {
+    size: A4 portrait;
+    margin: 8mm;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; font-size: ${fontSize}; line-height: 1.2; color: #1D1D1F; background: #fff; }
+
+  .ct-page {
+    display: grid;
+    grid-template-columns: ${gridCols};
+    gap: ${boxGap};
+    width: 100%;
+    min-height: 270mm;
+    align-content: start;
+  }
+
+  .ct-box {
+    border: 2px dashed #999;
+    border-radius: 10px;
+    padding: ${boxPadding};
+    page-break-inside: avoid;
+    break-inside: avoid;
+    background: #FAFAFA;
+  }
+
+  .ct-name {
+    text-align: center;
+    font-size: ${nameFontSize};
+    font-weight: 800;
+    color: #CC0000;
+    margin-bottom: 4px;
+    padding-bottom: 3px;
+    border-bottom: 1.5px solid #CC000040;
+    letter-spacing: 0.3px;
+  }
+
+  .ct-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: ${fontSize};
+    table-layout: fixed;
+  }
+
+  .ct-table th, .ct-table td {
+    border: 1px solid #CCC;
+    padding: ${cellPad};
+    text-align: center;
+    vertical-align: middle;
+  }
+
+  .ct-corner { width: 28px; background: #F0F0F0; font-size: ${headerFontSize}; font-weight: 600; }
+  .ct-day { background: #E8E8ED; font-size: ${headerFontSize}; font-weight: 700; color: #333; }
+  .ct-period { background: #F5F5F7; font-size: ${headerFontSize}; font-weight: 600; text-align: center; white-space: nowrap; }
+  .ct-time { font-size: ${tablesPerSheet <= 2 ? '5px' : '4px'}; color: #888; font-weight: 400; }
+  .ct-break { background: #FFF8E1 !important; font-size: ${headerFontSize}; color: #F57F17; text-align: center; }
+  .ct-cell { font-size: ${fontSize}; height: ${tablesPerSheet <= 2 ? '22px' : tablesPerSheet <= 4 ? '16px' : '12px'}; }
+  .ct-filled { background: #FFFFFF; }
+  .ct-empty { background: #F9F9F9; color: #CCC; }
+
+  .page-break { page-break-after: always; break-after: page; }
+
+  .report-header { text-align: center; padding-bottom: 4px; margin-bottom: 6px; border-bottom: 2px solid #007AFF; }
+  .school-name { font-size: 12px; font-weight: 700; color: #1D1D1F; }
+  .report-title { font-size: 9px; font-weight: 600; color: #555; margin-top: 1px; }
+  .custom-header { text-align: center; font-size: 7px; color: #555; font-style: italic; margin-bottom: 2px; }
+  .custom-footer { text-align: center; font-size: 7px; color: #555; font-style: italic; margin-top: 2px; }
+  .report-footer { margin-top: 6px; padding-top: 4px; border-top: 1px solid #DDD; display: flex; justify-content: space-between; font-size: 7px; color: #999; }
+
+  @media print {
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .ct-box { border-color: #666; }
+  }
+</style>
+</head>
+<body>
+  <div class="report-header">
+    <div class="school-name">${esc(schoolName)}</div>
+    <div class="report-title">Individual Teacher Timetables — Ready to Cut</div>
+    ${customHeaderHtml}
   </div>
+
   ${allPagesHtml}
-  <div class="rpt-footer">
-    <span>${esc(genTime)}</span>
+
+  ${customFooterHtml}
+  <div class="report-footer">
+    <span>${esc(today)}</span>
     <span>${teacherSchedules.length} teachers | ${tablesPerSheet} per sheet | ${totalPages} pages</span>
-    <span>Page: 1 of ${totalPages}</span>
   </div>
-</body></html>`;
-  }, [teacherSchedules, tablesPerSheet, activeDays, visiblePeriods, schoolName, timings]);
+</body>
+</html>`;
+  }, [teacherSchedules, tablesPerSheet, activeDays, visiblePeriods, schoolName, timings, printSettings]);
 
   const handlePrint = () => {
     if (selectedTeacherIds.length === 0) {
@@ -1272,7 +1690,7 @@ body { font-family: Arial, 'Helvetica Neue', sans-serif; font-size: ${fontSize};
       return;
     }
     const html = buildCutoutHtml();
-    printOrSave(html, 'Cutout_Teacher_Timetables');
+    printViaIframe(html, 'Cutout_Teacher_Timetables');
     toast({ title: 'Print dialog opened', description: `${selectedTeacherIds.length} teacher(s) scheduled for print.` });
   };
 
@@ -1388,6 +1806,12 @@ body { font-family: Arial, 'Helvetica Neue', sans-serif; font-size: ${fontSize};
               {isGenerating ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Download className="h-4 w-4 mr-1.5" />}
               Download PDF
             </Button>
+            <PrintSettingsDialog settings={printSettings} onUpdate={updateSettings} onReset={resetSettings}>
+              <Button variant="outline" size="sm">
+                <Settings2 className="h-4 w-4 mr-1.5" />
+                Print Settings
+              </Button>
+            </PrintSettingsDialog>
           </div>
         </CardContent>
       </Card>
@@ -1494,379 +1918,302 @@ function esc(str: string): string {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function buildClassTimetableHtml(schoolName: string, className: string, sectionName: string, timings: any, entries: any[], teachers: any[], classes: any[], sections: any[], subjects: any[], classId: string, sectionId: string, showBreaks: boolean, showEmpty: boolean): string {
+/* ---------- Shared professional CSS for timetable grid reports ---------- */
+
+function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string {
+  const margin = isLandscape ? '10mm 8mm 14mm 8mm' : '14mm 10mm 18mm 10mm';
+  const nupStyle = sheetsPerPage > 1
+    ? `\n  body.sheets-nup-2 { columns: 2; column-gap: 0; column-rule: none; }
+     body.sheets-nup-4 { columns: 2; column-gap: 0; column-rule: none; }`
+    : '';
+  return `
+  @page {
+    size: A4 ${isLandscape ? 'landscape' : 'portrait'};
+    margin: ${margin};
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    font-size: 9px;
+    color: #1D1D1F;
+    background: #fff;
+  }
+  ${nupStyle}
+
+  /* ── Page header ── */
+  .page-header {
+    text-align: center;
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+    border-bottom: 2.5px solid #007AFF;
+  }
+  .page-header .school-name { font-size: 16px; font-weight: 700; color: #1D1D1F; letter-spacing: -0.3px; }
+  .page-header .report-title { font-size: 12px; font-weight: 600; color: #333; margin-top: 3px; }
+  .page-header .report-sub { font-size: 10px; color: #555; margin-top: 2px; }
+  .custom-header { text-align: center; font-size: 9px; color: #666; font-style: italic; margin-top: 4px; }
+
+  /* ── Footer (fixed at bottom of every printed page) ── */
+  .page-footer {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    display: table;
+    width: 100%;
+    border-top: 1px solid #D1D1D6;
+    padding-top: 4px;
+    font-size: 7px;
+    color: #86868B;
+  }
+  .page-footer .f-left   { display: table-cell; text-align: left;   width: 33%; }
+  .page-footer .f-center { display: table-cell; text-align: center; width: 34%; }
+  .page-footer .f-right  { display: table-cell; text-align: right;  width: 33%; }
+  .custom-footer { text-align: center; font-size: 8px; color: #666; font-style: italic; margin-top: 6px; }
+
+  /* ── Timetable grid ── */
+  table.tt { width: 100%; border-collapse: collapse; }
+  table.tt th, table.tt td { border: 1px solid #D1D1D6; padding: 3px 2px; text-align: center; vertical-align: middle; }
+  table.tt th { background: #E8EAF6; font-size: 8px; font-weight: 700; color: #1a237e; }
+  .tp { background: #FAFAFA; font-size: 8px; width: 68px; min-width: 68px; }
+  .pl { display: block; font-weight: 700; color: #1D1D1F; }
+  .tt-time { display: block; font-size: 6.5px; color: #86868B; margin-top: 1px; }
+  .tf { font-size: 9px; }
+  .tn { display: block; font-size: 7px; color: #555; margin-top: 1px; }
+  .tb { font-size: 9px; color: #E65100; background: #FFF3E0 !important; font-style: italic; }
+  .te { color: #C7C7CC; }
+  .brk td { background: #FFF3E0 !important; }
+
+  /* ── Summary stats ── */
+  .sr { display: flex; gap: 12px; margin-bottom: 12px; justify-content: center; }
+  .si { text-align: center; padding: 8px 18px; background: #E8EAF6; border-radius: 8px; border: 1px solid #C5CAE9; }
+  .sn2 { display: block; font-size: 20px; font-weight: 700; color: #283593; }
+  .sl { display: block; font-size: 8px; color: #86868B; margin-top: 2px; }
+
+  /* ── Day blocks ── */
+  .db { margin-bottom: 8px; border: 1px solid #E5E5EA; border-radius: 6px; overflow: hidden; }
+  .dh { background: #F5F5F7; padding: 5px 8px; font-weight: 700; font-size: 10px; border-bottom: 1px solid #E5E5EA; }
+  .fc { font-weight: 400; font-size: 8px; color: #283593; margin-left: 5px; }
+  .di { display: flex; flex-wrap: wrap; gap: 5px; padding: 6px 8px; }
+  .fi { padding: 3px 8px; background: #E8F5E9; border: 1px solid #A5D6A7; border-radius: 4px; font-size: 8px; font-weight: 600; color: #2E7D32; }
+
+  @media print {
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .page-footer { position: fixed; bottom: 0; }
+  }`;
+}
+
+/* ---------- Class Timetable HTML ---------- */
+
+function buildClassTimetableHtml(
+  schoolName: string, className: string, sectionName: string,
+  timings: any, entries: any[], teachers: any[], classes: any[], sections: any[], subjects: any[],
+  classId: string, sectionId: string, showBreaks: boolean, showEmpty: boolean,
+  printSettings?: PrintSettings
+): string {
+  const s = printSettings || DEFAULT_PRINT_SETTINGS;
+  const isLandscape = s.orientation === 'landscape';
   const activeDays = timings.days;
-  const fe = entries.filter((e: any) => e.classId === classId && e.sectionId === sectionId);
+  const filteredEntries = entries.filter((e: any) => e.classId === classId && e.sectionId === sectionId);
   const genTime = new Date().toLocaleString('en-PK', { dateStyle: 'medium', timeStyle: 'short' });
   const reportTitle = 'Class Timetable';
   const subtitle = `${className} \u2014 Section ${sectionName}`;
+
   const getT = (id: string) => teachers.find((t: any) => t.id === id);
   const getS = (id: string) => subjects.find((s: any) => s.id === id);
+
   let rows = '';
   for (let p = 1; p <= timings.periodsPerDay; p++) {
     const isBreak = isBreakPeriod(p, timings);
     if (isBreak && !showBreaks) continue;
     const time = getPeriodTime(p, timings);
     const label = getPeriodLabel(p, timings);
-    if (isBreak) {
-      rows += `<tr class="tt-break"><td class="tt-period"><span class="pl">${esc(label)}</span><span class="pt">${esc(time)}</span></td>${activeDays.map(() => '<td class="tt-break-cell">\u2615 Break</td>').join('')}</tr>`;
-      continue;
-    }
-    rows += `<tr><td class="tt-period"><span class="pl">${esc(label)}</span><span class="pt">${esc(time)}</span></td>`;
+    const rowClass = isBreak ? ' class="brk"' : '';
+    rows += `<tr${rowClass}><td class="tp"><span class="pl">${esc(label)}</span><span class="tt-time">${esc(time)}</span></td>`;
     for (const day of activeDays) {
-      const entry = fe.find((e: any) => e.day === day && e.period === p);
+      if (isBreak) { rows += '<td class="tb">&#9749; Break</td>'; continue; }
+      const entry = filteredEntries.find((e: any) => e.day === day && e.period === p);
       if (entry) {
         const subj = getS(entry.subjectId);
         const tchr = getT(entry.teacherId);
-        rows += `<td class="tt-filled"><b>${esc(subj?.shortName || '?')}</b><span class="tn">${esc(tchr?.name || '?')}</span></td>`;
+        rows += `<td class="tf"><b>${esc(subj?.shortName || '?')}</b><span class="tn">${esc(tchr?.name || '?')}</span></td>`;
       } else if (showEmpty) {
-        rows += '<td class="tt-empty">\u2014</td>';
+        rows += '<td class="te">\u2014</td>';
       } else {
         rows += '<td></td>';
       }
     }
     rows += '</tr>';
   }
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: Arial, 'Helvetica Neue', sans-serif; font-size: 9pt; color: #1a1a2e; background: #fff; }
 
-/* ── Page setup ── */
-@page { size: A4 portrait; margin: 14mm 12mm 14mm 12mm; }
-@page { @bottom-left   { content: attr(data-gen-time); font-family: Arial; font-size: 7pt; color: #888; } }
-@page { @bottom-center { content: attr(data-footer-mid); font-family: Arial; font-size: 7pt; color: #888; } }
-@page { @bottom-right  { content: "Page " counter(page) " of " counter(pages); font-family: Arial; font-size: 7pt; color: #888; } }
+  const customHeaderHtml = s.headerContent
+    ? `<div class="custom-header">${esc(s.headerContent)}</div>`
+    : '';
+  const customFooterHtml = s.footerContent
+    ? `<div class="custom-footer">${esc(s.footerContent)}</div>`
+    : '';
+  const bodyClass = s.sheetsPerPage > 1 ? ` class="sheets-nup-${s.sheetsPerPage}"` : '';
 
-/* ── Header block ── */
-.rpt-header { text-align: center; padding-bottom: 8px; margin-bottom: 10px; border-bottom: 3px solid #1565C0; }
-.rpt-school { font-size: 15pt; font-weight: 700; color: #0D47A1; letter-spacing: 0.5px; }
-.rpt-title  { font-size: 11pt; font-weight: 600; color: #1a1a2e; margin-top: 3px; }
-.rpt-sub    { font-size: 9pt;  color: #555; margin-top: 2px; }
-
-/* ── Footer bar ── */
-.rpt-footer {
-  margin-top: 12px; padding-top: 6px;
-  border-top: 1px solid #B0BEC5;
-  display: flex; justify-content: space-between; align-items: center;
-  font-size: 7pt; color: #78909C;
-}
-.rpt-footer .fl { text-align: left; }
-.rpt-footer .fc { text-align: center; flex: 1; }
-.rpt-footer .fr { text-align: right; }
-
-/* ── Timetable grid ── */
-.tt-table { width: 100%; border-collapse: collapse; margin-top: 4px; }
-.tt-table th, .tt-table td { border: 1px solid #CFD8DC; padding: 3pt 2pt; text-align: center; vertical-align: middle; }
-.tt-table thead th { background: #1565C0; color: #fff; font-size: 8pt; font-weight: 700; }
-.tt-table thead th:first-child { background: #0D47A1; }
-.tt-period { background: #E3F2FD; font-size: 7.5pt; width: 70px; min-width: 70px; }
-.tt-period .pl { display: block; font-weight: 700; color: #0D47A1; }
-.tt-period .pt { display: block; font-size: 6pt; color: #78909C; margin-top: 1px; }
-.tt-filled { font-size: 8pt; }
-.tt-filled b { display: block; color: #1a237e; }
-.tt-filled .tn { display: block; font-size: 6.5pt; color: #455A64; margin-top: 1px; }
-.tt-empty { color: #CFD8DC; font-size: 10pt; }
-.tt-break td { background: #FFF8E1 !important; }
-.tt-break-cell { font-style: italic; color: #F57F17; font-size: 8pt; }
-
-/* ── Free periods ── */
-.fp-stats { display: flex; gap: 10px; justify-content: center; margin-bottom: 12px; }
-.fp-stat { text-align: center; padding: 7px 16px; background: #E3F2FD; border-radius: 8px; border: 1px solid #90CAF9; }
-.fp-stat-num { display: block; font-size: 18pt; font-weight: 700; color: #1565C0; }
-.fp-stat-lbl { display: block; font-size: 7pt; color: #78909C; margin-top: 2px; }
-.fp-day { margin-bottom: 8px; border: 1px solid #CFD8DC; border-radius: 6px; overflow: hidden; }
-.fp-day-hd { background: #1565C0; color: #fff; padding: 5px 8px; font-weight: 700; font-size: 9pt; }
-.fp-day-hd .fc { font-weight: 400; font-size: 7.5pt; color: #BBDEFB; margin-left: 6px; }
-.fp-day-bd { display: flex; flex-wrap: wrap; gap: 5px; padding: 7px 8px; }
-.fp-chip { padding: 3px 9px; background: #E8F5E9; border: 1px solid #A5D6A7; border-radius: 12px; font-size: 7.5pt; font-weight: 600; color: #2E7D32; }
-.fp-chip span { font-weight: 400; color: #555; font-size: 6.5pt; margin-left: 3px; }
-
-/* ── Period count table ── */
-.pc-table { width: 100%; border-collapse: collapse; }
-.pc-table th, .pc-table td { border: 1px solid #CFD8DC; padding: 3pt 2pt; text-align: center; vertical-align: middle; }
-.pc-table thead tr th { background: #1565C0; color: #fff; font-size: 7.5pt; font-weight: 700; }
-.pc-table thead tr th.th-name { text-align: left; }
-.td-sno { color: #78909C; font-size: 7pt; width: 22px; }
-.td-name { text-align: left !important; font-weight: 500; }
-.td-short { font-weight: 600; }
-.td-num { font-weight: 600; }
-.td-zero { background: #FFF3E0 !important; color: #E65100; }
-.td-full { background: #E8F5E9 !important; color: #2E7D32; }
-.td-total { background: #E3F2FD; font-weight: 700; color: #1565C0; }
-.td-detail { text-align: left !important; font-size: 6.5pt; color: #555; }
-.pc-summary { display: flex; gap: 10px; justify-content: center; margin-top: 10px; flex-wrap: wrap; }
-.pc-sum-item { text-align: center; padding: 5px 14px; background: #E3F2FD; border-radius: 6px; border: 1px solid #90CAF9; }
-.pc-sum-num { display: block; font-size: 14pt; font-weight: 700; color: #1565C0; }
-.pc-sum-lbl { display: block; font-size: 6.5pt; color: #78909C; }
-
-@media print {
-  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-}
-</style></head><body>
-  <div class="rpt-header">
-    <div class="rpt-school">${esc(schoolName)}</div>
-    <div class="rpt-title">${esc(reportTitle)}</div>
-    <div class="rpt-sub">${esc(subtitle)}</div>
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${buildTimetableCss(isLandscape, s.sheetsPerPage)}</style></head>
+<body${bodyClass}>
+  <div class="page-header">
+    <div class="school-name">${esc(schoolName)}</div>
+    <div class="report-title">${esc(reportTitle)}</div>
+    <div class="report-sub">${esc(subtitle)}</div>
+    ${customHeaderHtml}
   </div>
-  <table class="tt-table">
-    <thead><tr><th>Period / Day</th>${activeDays.map((d: string) => `<th>${esc(d)}</th>`).join('')}</tr></thead>
+  <div class="page-footer">
+    <span class="f-left">${esc(genTime)}</span>
+    <span class="f-center">${esc(schoolName)} &mdash; ${esc(reportTitle)}</span>
+    <span class="f-right">Page: 1 of 1</span>
+  </div>
+  <table class="tt">
+    <thead><tr><th>Day / Period</th>${activeDays.map((d: string) => `<th>${esc(d)}</th>`).join('')}</tr></thead>
     <tbody>${rows}</tbody>
   </table>
-  <div class="rpt-footer">
-    <span class="fl">${esc(genTime)}</span>
-    <span class="fc">${esc(schoolName)} \u2014 ${esc(reportTitle)}</span>
-    <span class="fr">Page: 1 of 1</span>
-  </div>
+  ${customFooterHtml}
 </body></html>`;
 }
 
-function buildTeacherScheduleHtml(schoolName: string, teacherName: string, timings: any, entries: any[], teachers: any[], classes: any[], sections: any[], subjects: any[], teacherId: string, showBreaks: boolean, showEmpty: boolean): string {
+/* ---------- Teacher Schedule HTML ---------- */
+
+function buildTeacherScheduleHtml(
+  schoolName: string, teacherName: string,
+  timings: any, entries: any[], teachers: any[], classes: any[], sections: any[], subjects: any[],
+  teacherId: string, showBreaks: boolean, showEmpty: boolean,
+  printSettings?: PrintSettings
+): string {
+  const s = printSettings || DEFAULT_PRINT_SETTINGS;
+  const isLandscape = s.orientation === 'landscape';
   const activeDays = timings.days;
-  const fe = entries.filter((e: any) => e.teacherId === teacherId);
+  const filteredEntries = entries.filter((e: any) => e.teacherId === teacherId);
   const genTime = new Date().toLocaleString('en-PK', { dateStyle: 'medium', timeStyle: 'short' });
   const reportTitle = 'Teacher Schedule';
+
   const getS = (id: string) => subjects.find((s: any) => s.id === id);
   const getC = (id: string) => classes.find((c: any) => c.id === id);
   const getSec = (id: string) => sections.find((s: any) => s.id === id);
+
   let rows = '';
   for (let p = 1; p <= timings.periodsPerDay; p++) {
     const isBreak = isBreakPeriod(p, timings);
     if (isBreak && !showBreaks) continue;
     const time = getPeriodTime(p, timings);
     const label = getPeriodLabel(p, timings);
-    if (isBreak) {
-      rows += `<tr class="tt-break"><td class="tt-period"><span class="pl">${esc(label)}</span><span class="pt">${esc(time)}</span></td>${activeDays.map(() => '<td class="tt-break-cell">\u2615 Break</td>').join('')}</tr>`;
-      continue;
-    }
-    rows += `<tr><td class="tt-period"><span class="pl">${esc(label)}</span><span class="pt">${esc(time)}</span></td>`;
+    const rowClass = isBreak ? ' class="brk"' : '';
+    rows += `<tr${rowClass}><td class="tp"><span class="pl">${esc(label)}</span><span class="tt-time">${esc(time)}</span></td>`;
     for (const day of activeDays) {
-      const entry = fe.find((e: any) => e.day === day && e.period === p);
+      if (isBreak) { rows += '<td class="tb">&#9749; Break</td>'; continue; }
+      const entry = filteredEntries.find((e: any) => e.day === day && e.period === p);
       if (entry) {
         const subj = getS(entry.subjectId);
         const cls = getC(entry.classId);
         const sec = getSec(entry.sectionId);
-        rows += `<td class="tt-filled"><b>${esc(subj?.shortName || '?')}</b><span class="tn">${esc(cls?.name || '')}-${esc(sec?.name || '')}</span></td>`;
+        rows += `<td class="tf"><b>${esc(subj?.shortName || '?')}</b><span class="tn">${esc(cls?.name || '')}-${esc(sec?.name || '')}</span></td>`;
       } else if (showEmpty) {
-        rows += '<td class="tt-empty">\u2014</td>';
+        rows += '<td class="te">\u2014</td>';
       } else {
         rows += '<td></td>';
       }
     }
     rows += '</tr>';
   }
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: Arial, 'Helvetica Neue', sans-serif; font-size: 9pt; color: #1a1a2e; background: #fff; }
 
-/* ── Page setup ── */
-@page { size: A4 portrait; margin: 14mm 12mm 14mm 12mm; }
-@page { @bottom-left   { content: attr(data-gen-time); font-family: Arial; font-size: 7pt; color: #888; } }
-@page { @bottom-center { content: attr(data-footer-mid); font-family: Arial; font-size: 7pt; color: #888; } }
-@page { @bottom-right  { content: "Page " counter(page) " of " counter(pages); font-family: Arial; font-size: 7pt; color: #888; } }
+  const customHeaderHtml = s.headerContent
+    ? `<div class="custom-header">${esc(s.headerContent)}</div>`
+    : '';
+  const customFooterHtml = s.footerContent
+    ? `<div class="custom-footer">${esc(s.footerContent)}</div>`
+    : '';
+  const bodyClass = s.sheetsPerPage > 1 ? ` class="sheets-nup-${s.sheetsPerPage}"` : '';
 
-/* ── Header block ── */
-.rpt-header { text-align: center; padding-bottom: 8px; margin-bottom: 10px; border-bottom: 3px solid #1565C0; }
-.rpt-school { font-size: 15pt; font-weight: 700; color: #0D47A1; letter-spacing: 0.5px; }
-.rpt-title  { font-size: 11pt; font-weight: 600; color: #1a1a2e; margin-top: 3px; }
-.rpt-sub    { font-size: 9pt;  color: #555; margin-top: 2px; }
-
-/* ── Footer bar ── */
-.rpt-footer {
-  margin-top: 12px; padding-top: 6px;
-  border-top: 1px solid #B0BEC5;
-  display: flex; justify-content: space-between; align-items: center;
-  font-size: 7pt; color: #78909C;
-}
-.rpt-footer .fl { text-align: left; }
-.rpt-footer .fc { text-align: center; flex: 1; }
-.rpt-footer .fr { text-align: right; }
-
-/* ── Timetable grid ── */
-.tt-table { width: 100%; border-collapse: collapse; margin-top: 4px; }
-.tt-table th, .tt-table td { border: 1px solid #CFD8DC; padding: 3pt 2pt; text-align: center; vertical-align: middle; }
-.tt-table thead th { background: #1565C0; color: #fff; font-size: 8pt; font-weight: 700; }
-.tt-table thead th:first-child { background: #0D47A1; }
-.tt-period { background: #E3F2FD; font-size: 7.5pt; width: 70px; min-width: 70px; }
-.tt-period .pl { display: block; font-weight: 700; color: #0D47A1; }
-.tt-period .pt { display: block; font-size: 6pt; color: #78909C; margin-top: 1px; }
-.tt-filled { font-size: 8pt; }
-.tt-filled b { display: block; color: #1a237e; }
-.tt-filled .tn { display: block; font-size: 6.5pt; color: #455A64; margin-top: 1px; }
-.tt-empty { color: #CFD8DC; font-size: 10pt; }
-.tt-break td { background: #FFF8E1 !important; }
-.tt-break-cell { font-style: italic; color: #F57F17; font-size: 8pt; }
-
-/* ── Free periods ── */
-.fp-stats { display: flex; gap: 10px; justify-content: center; margin-bottom: 12px; }
-.fp-stat { text-align: center; padding: 7px 16px; background: #E3F2FD; border-radius: 8px; border: 1px solid #90CAF9; }
-.fp-stat-num { display: block; font-size: 18pt; font-weight: 700; color: #1565C0; }
-.fp-stat-lbl { display: block; font-size: 7pt; color: #78909C; margin-top: 2px; }
-.fp-day { margin-bottom: 8px; border: 1px solid #CFD8DC; border-radius: 6px; overflow: hidden; }
-.fp-day-hd { background: #1565C0; color: #fff; padding: 5px 8px; font-weight: 700; font-size: 9pt; }
-.fp-day-hd .fc { font-weight: 400; font-size: 7.5pt; color: #BBDEFB; margin-left: 6px; }
-.fp-day-bd { display: flex; flex-wrap: wrap; gap: 5px; padding: 7px 8px; }
-.fp-chip { padding: 3px 9px; background: #E8F5E9; border: 1px solid #A5D6A7; border-radius: 12px; font-size: 7.5pt; font-weight: 600; color: #2E7D32; }
-.fp-chip span { font-weight: 400; color: #555; font-size: 6.5pt; margin-left: 3px; }
-
-/* ── Period count table ── */
-.pc-table { width: 100%; border-collapse: collapse; }
-.pc-table th, .pc-table td { border: 1px solid #CFD8DC; padding: 3pt 2pt; text-align: center; vertical-align: middle; }
-.pc-table thead tr th { background: #1565C0; color: #fff; font-size: 7.5pt; font-weight: 700; }
-.pc-table thead tr th.th-name { text-align: left; }
-.td-sno { color: #78909C; font-size: 7pt; width: 22px; }
-.td-name { text-align: left !important; font-weight: 500; }
-.td-short { font-weight: 600; }
-.td-num { font-weight: 600; }
-.td-zero { background: #FFF3E0 !important; color: #E65100; }
-.td-full { background: #E8F5E9 !important; color: #2E7D32; }
-.td-total { background: #E3F2FD; font-weight: 700; color: #1565C0; }
-.td-detail { text-align: left !important; font-size: 6.5pt; color: #555; }
-.pc-summary { display: flex; gap: 10px; justify-content: center; margin-top: 10px; flex-wrap: wrap; }
-.pc-sum-item { text-align: center; padding: 5px 14px; background: #E3F2FD; border-radius: 6px; border: 1px solid #90CAF9; }
-.pc-sum-num { display: block; font-size: 14pt; font-weight: 700; color: #1565C0; }
-.pc-sum-lbl { display: block; font-size: 6.5pt; color: #78909C; }
-
-@media print {
-  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-}
-</style></head><body>
-  <div class="rpt-header">
-    <div class="rpt-school">${esc(schoolName)}</div>
-    <div class="rpt-title">${esc(reportTitle)}</div>
-    <div class="rpt-sub">${esc(teacherName)}</div>
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${buildTimetableCss(isLandscape, s.sheetsPerPage)}</style></head>
+<body${bodyClass}>
+  <div class="page-header">
+    <div class="school-name">${esc(schoolName)}</div>
+    <div class="report-title">${esc(reportTitle)}</div>
+    <div class="report-sub">${esc(teacherName)}</div>
+    ${customHeaderHtml}
   </div>
-  <table class="tt-table">
-    <thead><tr><th>Period / Day</th>${activeDays.map((d: string) => `<th>${esc(d)}</th>`).join('')}</tr></thead>
+  <div class="page-footer">
+    <span class="f-left">${esc(genTime)}</span>
+    <span class="f-center">${esc(schoolName)} &mdash; ${esc(reportTitle)}</span>
+    <span class="f-right">Page: 1 of 1</span>
+  </div>
+  <table class="tt">
+    <thead><tr><th>Day / Period</th>${activeDays.map((d: string) => `<th>${esc(d)}</th>`).join('')}</tr></thead>
     <tbody>${rows}</tbody>
   </table>
-  <div class="rpt-footer">
-    <span class="fl">${esc(genTime)}</span>
-    <span class="fc">${esc(schoolName)} \u2014 ${esc(reportTitle)}</span>
-    <span class="fr">Page: 1 of 1</span>
-  </div>
+  ${customFooterHtml}
 </body></html>`;
 }
 
-function buildFreePeriodsHtml(schoolName: string, teacherName: string, timings: any, entries: any[], teachers: any[], classes: any[], sections: any[], subjects: any[], teacherId: string): string {
+/* ---------- Free Periods HTML ---------- */
+
+function buildFreePeriodsHtml(
+  schoolName: string, teacherName: string,
+  timings: any, entries: any[], teachers: any[], classes: any[], sections: any[], subjects: any[],
+  teacherId: string,
+  printSettings?: PrintSettings
+): string {
+  const s = printSettings || DEFAULT_PRINT_SETTINGS;
+  const isLandscape = s.orientation === 'landscape';
   const activeDays = timings.days;
-  const te = entries.filter((e: any) => e.teacherId === teacherId);
+  const teacherEntries = entries.filter((e: any) => e.teacherId === teacherId);
   const genTime = new Date().toLocaleString('en-PK', { dateStyle: 'medium', timeStyle: 'short' });
   const reportTitle = 'Free Periods Analysis';
-  const fps: { day: string; period: number; time: string }[] = [];
+
+  const freePeriods: { day: string; period: number; time: string }[] = [];
   activeDays.forEach((day: string) => {
     for (let p = 1; p <= timings.periodsPerDay; p++) {
       if (isBreakPeriod(p, timings)) continue;
-      if (!te.some((e: any) => e.day === day && e.period === p))
-        fps.push({ day, period: p, time: getPeriodTime(p, timings) });
+      if (!teacherEntries.some((e: any) => e.day === day && e.period === p)) {
+        freePeriods.push({ day, period: p, time: getPeriodTime(p, timings) });
+      }
     }
   });
-  const grouped = new Map<string, typeof fps>();
-  fps.forEach((fp) => { const l = grouped.get(fp.day) || []; l.push(fp); grouped.set(fp.day, l); });
-  const nonBreak = timings.periodTimingMode === 'custom'
+
+  const grouped = new Map<string, typeof freePeriods>();
+  freePeriods.forEach((fp) => { const list = grouped.get(fp.day) || []; list.push(fp); grouped.set(fp.day, list); });
+
+  const nonBreakCount = timings.periodTimingMode === 'custom'
     ? timings.customPeriodTimings.filter((pt: any) => !pt.isBreak).length
     : timings.periodsPerDay - (timings.breakAfterPeriod > 0 ? 1 : 0);
-  const total = activeDays.length * nonBreak;
-  const pct = total > 0 ? Math.round((fps.length / total) * 100) : 0;
+  const totalTeaching = activeDays.length * nonBreakCount;
+  const pct = totalTeaching > 0 ? Math.round((freePeriods.length / totalTeaching) * 100) : 0;
+
   let dayBlocks = '';
   activeDays.forEach((day: string) => {
-    const df = grouped.get(day);
-    if (!df || df.length === 0) return;
-    const chips = df.map((fp) => `<span class="fp-chip">${getPeriodLabel(fp.period, timings)} <span>${esc(fp.time)}</span></span>`).join('');
-    dayBlocks += `<div class="fp-day"><div class="fp-day-hd">${esc(day)}<span class="fc">${df.length} free</span></div><div class="fp-day-bd">${chips}</div></div>`;
+    const dayFree = grouped.get(day);
+    if (!dayFree || dayFree.length === 0) return;
+    const items = dayFree.map((fp) => `<span class="fi">${getPeriodLabel(fp.period, timings)} (${esc(fp.time)})</span>`).join('');
+    dayBlocks += `<div class="db"><div class="dh">${esc(day)} <span class="fc">${dayFree.length} free</span></div><div class="di">${items}</div></div>`;
   });
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: Arial, 'Helvetica Neue', sans-serif; font-size: 9pt; color: #1a1a2e; background: #fff; }
 
-/* ── Page setup ── */
-@page { size: A4 portrait; margin: 14mm 12mm 14mm 12mm; }
-@page { @bottom-left   { content: attr(data-gen-time); font-family: Arial; font-size: 7pt; color: #888; } }
-@page { @bottom-center { content: attr(data-footer-mid); font-family: Arial; font-size: 7pt; color: #888; } }
-@page { @bottom-right  { content: "Page " counter(page) " of " counter(pages); font-family: Arial; font-size: 7pt; color: #888; } }
+  const customHeaderHtml = s.headerContent
+    ? `<div class="custom-header">${esc(s.headerContent)}</div>`
+    : '';
+  const customFooterHtml = s.footerContent
+    ? `<div class="custom-footer">${esc(s.footerContent)}</div>`
+    : '';
+  const bodyClass = s.sheetsPerPage > 1 ? ` class="sheets-nup-${s.sheetsPerPage}"` : '';
 
-/* ── Header block ── */
-.rpt-header { text-align: center; padding-bottom: 8px; margin-bottom: 10px; border-bottom: 3px solid #1565C0; }
-.rpt-school { font-size: 15pt; font-weight: 700; color: #0D47A1; letter-spacing: 0.5px; }
-.rpt-title  { font-size: 11pt; font-weight: 600; color: #1a1a2e; margin-top: 3px; }
-.rpt-sub    { font-size: 9pt;  color: #555; margin-top: 2px; }
-
-/* ── Footer bar ── */
-.rpt-footer {
-  margin-top: 12px; padding-top: 6px;
-  border-top: 1px solid #B0BEC5;
-  display: flex; justify-content: space-between; align-items: center;
-  font-size: 7pt; color: #78909C;
-}
-.rpt-footer .fl { text-align: left; }
-.rpt-footer .fc { text-align: center; flex: 1; }
-.rpt-footer .fr { text-align: right; }
-
-/* ── Timetable grid ── */
-.tt-table { width: 100%; border-collapse: collapse; margin-top: 4px; }
-.tt-table th, .tt-table td { border: 1px solid #CFD8DC; padding: 3pt 2pt; text-align: center; vertical-align: middle; }
-.tt-table thead th { background: #1565C0; color: #fff; font-size: 8pt; font-weight: 700; }
-.tt-table thead th:first-child { background: #0D47A1; }
-.tt-period { background: #E3F2FD; font-size: 7.5pt; width: 70px; min-width: 70px; }
-.tt-period .pl { display: block; font-weight: 700; color: #0D47A1; }
-.tt-period .pt { display: block; font-size: 6pt; color: #78909C; margin-top: 1px; }
-.tt-filled { font-size: 8pt; }
-.tt-filled b { display: block; color: #1a237e; }
-.tt-filled .tn { display: block; font-size: 6.5pt; color: #455A64; margin-top: 1px; }
-.tt-empty { color: #CFD8DC; font-size: 10pt; }
-.tt-break td { background: #FFF8E1 !important; }
-.tt-break-cell { font-style: italic; color: #F57F17; font-size: 8pt; }
-
-/* ── Free periods ── */
-.fp-stats { display: flex; gap: 10px; justify-content: center; margin-bottom: 12px; }
-.fp-stat { text-align: center; padding: 7px 16px; background: #E3F2FD; border-radius: 8px; border: 1px solid #90CAF9; }
-.fp-stat-num { display: block; font-size: 18pt; font-weight: 700; color: #1565C0; }
-.fp-stat-lbl { display: block; font-size: 7pt; color: #78909C; margin-top: 2px; }
-.fp-day { margin-bottom: 8px; border: 1px solid #CFD8DC; border-radius: 6px; overflow: hidden; }
-.fp-day-hd { background: #1565C0; color: #fff; padding: 5px 8px; font-weight: 700; font-size: 9pt; }
-.fp-day-hd .fc { font-weight: 400; font-size: 7.5pt; color: #BBDEFB; margin-left: 6px; }
-.fp-day-bd { display: flex; flex-wrap: wrap; gap: 5px; padding: 7px 8px; }
-.fp-chip { padding: 3px 9px; background: #E8F5E9; border: 1px solid #A5D6A7; border-radius: 12px; font-size: 7.5pt; font-weight: 600; color: #2E7D32; }
-.fp-chip span { font-weight: 400; color: #555; font-size: 6.5pt; margin-left: 3px; }
-
-/* ── Period count table ── */
-.pc-table { width: 100%; border-collapse: collapse; }
-.pc-table th, .pc-table td { border: 1px solid #CFD8DC; padding: 3pt 2pt; text-align: center; vertical-align: middle; }
-.pc-table thead tr th { background: #1565C0; color: #fff; font-size: 7.5pt; font-weight: 700; }
-.pc-table thead tr th.th-name { text-align: left; }
-.td-sno { color: #78909C; font-size: 7pt; width: 22px; }
-.td-name { text-align: left !important; font-weight: 500; }
-.td-short { font-weight: 600; }
-.td-num { font-weight: 600; }
-.td-zero { background: #FFF3E0 !important; color: #E65100; }
-.td-full { background: #E8F5E9 !important; color: #2E7D32; }
-.td-total { background: #E3F2FD; font-weight: 700; color: #1565C0; }
-.td-detail { text-align: left !important; font-size: 6.5pt; color: #555; }
-.pc-summary { display: flex; gap: 10px; justify-content: center; margin-top: 10px; flex-wrap: wrap; }
-.pc-sum-item { text-align: center; padding: 5px 14px; background: #E3F2FD; border-radius: 6px; border: 1px solid #90CAF9; }
-.pc-sum-num { display: block; font-size: 14pt; font-weight: 700; color: #1565C0; }
-.pc-sum-lbl { display: block; font-size: 6.5pt; color: #78909C; }
-
-@media print {
-  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-}
-</style></head><body>
-  <div class="rpt-header">
-    <div class="rpt-school">${esc(schoolName)}</div>
-    <div class="rpt-title">${esc(reportTitle)}</div>
-    <div class="rpt-sub">${esc(teacherName)}</div>
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${buildTimetableCss(isLandscape, s.sheetsPerPage)}</style></head>
+<body${bodyClass}>
+  <div class="page-header">
+    <div class="school-name">${esc(schoolName)}</div>
+    <div class="report-title">${esc(reportTitle)}</div>
+    <div class="report-sub">${esc(teacherName)}</div>
+    ${customHeaderHtml}
   </div>
-  <div class="fp-stats">
-    <div class="fp-stat"><span class="fp-stat-num">${fps.length}</span><span class="fp-stat-lbl">Free Periods</span></div>
-    <div class="fp-stat"><span class="fp-stat-num">${total - fps.length}</span><span class="fp-stat-lbl">Assigned</span></div>
-    <div class="fp-stat"><span class="fp-stat-num">${total}</span><span class="fp-stat-lbl">Total Slots</span></div>
-    <div class="fp-stat"><span class="fp-stat-num">${pct}%</span><span class="fp-stat-lbl">Free Rate</span></div>
+  <div class="page-footer">
+    <span class="f-left">${esc(genTime)}</span>
+    <span class="f-center">${esc(schoolName)} &mdash; ${esc(reportTitle)}</span>
+    <span class="f-right">Page: 1 of 1</span>
+  </div>
+  <div class="sr">
+    <div class="si"><span class="sn2">${freePeriods.length}</span><span class="sl">Free Periods</span></div>
+    <div class="si"><span class="sn2">${totalTeaching}</span><span class="sl">Total Periods</span></div>
+    <div class="si"><span class="sn2">${pct}%</span><span class="sl">Free Rate</span></div>
   </div>
   ${dayBlocks}
-  <div class="rpt-footer">
-    <span class="fl">${esc(genTime)}</span>
-    <span class="fc">${esc(schoolName)} \u2014 ${esc(reportTitle)}</span>
-    <span class="fr">Page: 1 of 1</span>
-  </div>
+  ${customFooterHtml}
 </body></html>`;
 }
-
