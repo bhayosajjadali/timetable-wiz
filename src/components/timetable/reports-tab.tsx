@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useTimetableStore } from '@/lib/store';
-import { getSubjectColor, getPeriodTime, isBreakPeriod } from '@/lib/timetable-utils';
+import { getSubjectColor, getPeriodTime, isBreakPeriod, getPeriodLabel } from '@/lib/timetable-utils';
 import { useToast } from '@/hooks/use-toast';
 import {
   FileText,
@@ -424,7 +424,7 @@ function TeacherPeriodCountReport() {
           for (const day of filteredSelectedDays) {
             const periods = td.dayPeriods[day] || [];
             if (periods.length > 0) {
-              const pList = periods.map((p) => `P${p.period}`).join(',');
+              const pList = periods.map((p) => getPeriodLabel(p.period, timings)).join(',');
               detailParts.push(`${day.slice(0,3)}:${pList}`);
             }
           }
@@ -765,7 +765,7 @@ function TeacherPeriodCountReport() {
                             if (periods.length === 0) return null;
                             return (
                               <span key={day}>
-                                {day.slice(0, 3)}: {periods.map((p) => `P${p.period}`).join(',')} &nbsp;
+                                {day.slice(0, 3)}: {periods.map((p) => getPeriodLabel(p.period, timings)).join(',')} &nbsp;
                               </span>
                             );
                           })}
@@ -891,7 +891,7 @@ function ClassTimetableReport({ classId, sectionId, showBreaks, showEmpty }: { c
                 return (
                   <div key={`row-${period}`}>
                     <div className={`bg-muted/50 p-2 flex flex-col items-center justify-center gap-0.5 ${isBreak ? 'bg-amber-100 dark:bg-amber-900/20' : ''}`}>
-                      <span className="text-xs font-medium">{isBreak ? 'Break' : `P${period}`}</span>
+                      <span className="text-xs font-medium">{getPeriodLabel(period, timings)}</span>
                       <span className="text-[10px] text-muted-foreground">{time}</span>
                     </div>
                     {activeDays.map((day) => {
@@ -982,7 +982,7 @@ function TeacherScheduleReport({ teacherId, showBreaks, showEmpty }: { teacherId
                 return (
                   <div key={`row-${period}`}>
                     <div className={`bg-muted/50 p-2 flex flex-col items-center justify-center gap-0.5 ${isBreak ? 'bg-amber-100 dark:bg-amber-900/20' : ''}`}>
-                      <span className="text-xs font-medium">{isBreak ? 'Break' : `P${period}`}</span>
+                      <span className="text-xs font-medium">{getPeriodLabel(period, timings)}</span>
                       <span className="text-[10px] text-muted-foreground">{time}</span>
                     </div>
                     {activeDays.map((day) => {
@@ -1220,7 +1220,7 @@ function CutoutTimetablesReport() {
           continue;
         }
         const time = getPeriodTime(period, timings);
-        tableHtml += `<tr><td class="ct-period">${esc('P' + period)}<br><span class="ct-time">${esc(time)}</span></td>`;
+        tableHtml += `<tr><td class="ct-period">${esc(getPeriodLabel(period, timings))}<br><span class="ct-time">${esc(time)}</span></td>`;
         for (const day of activeDays) {
           const cell = schedule[day]?.[period];
           if (cell) {
@@ -1594,7 +1594,7 @@ function CutoutTimetablesReport() {
                             return (
                               <tr key={period}>
                                 <td className="border px-1 py-0.5 bg-muted text-center text-[8px] font-semibold whitespace-nowrap">
-                                  P{period}<br /><span className="text-[7px] text-muted-foreground">{time}</span>
+                                  {getPeriodLabel(period, timings)}<br /><span className="text-[7px] text-muted-foreground">{time}</span>
                                 </td>
                                 {activeDays.map((day) => {
                                   const cell = schedule[day]?.[period];
@@ -1653,7 +1653,7 @@ function buildClassTimetableHtml(schoolName: string, className: string, sectionN
     const isBreak = isBreakPeriod(p, timings);
     if (isBreak && !showBreaks) continue;
     const time = getPeriodTime(p, timings);
-    const label = isBreak ? 'Break' : `P${p}`;
+    const label = getPeriodLabel(p, timings);
     const rowClass = isBreak ? ' style="background:#FFF8E1"' : '';
 
     rows += `<tr${rowClass}><td class="tp">${esc(label)}<br><span class="tt">${esc(time)}</span></td>`;
@@ -1706,7 +1706,7 @@ function buildTeacherScheduleHtml(schoolName: string, teacherName: string, timin
     const isBreak = isBreakPeriod(p, timings);
     if (isBreak && !showBreaks) continue;
     const time = getPeriodTime(p, timings);
-    const label = isBreak ? 'Break' : `P${p}`;
+    const label = getPeriodLabel(p, timings);
     const rowClass = isBreak ? ' style="background:#FFF8E1"' : '';
 
     rows += `<tr${rowClass}><td class="tp">${esc(label)}<br><span class="tt">${esc(time)}</span></td>`;
@@ -1772,7 +1772,7 @@ function buildFreePeriodsHtml(schoolName: string, teacherName: string, timings: 
   activeDays.forEach((day: string) => {
     const dayFree = grouped.get(day);
     if (!dayFree || dayFree.length === 0) return;
-    let items = dayFree.map((fp) => `<span class="fi">P${fp.period} (${esc(fp.time)})</span>`).join('');
+    let items = dayFree.map((fp) => `<span class="fi">${getPeriodLabel(fp.period, timings)} (${esc(fp.time)})</span>`).join('');
     dayBlocks += `<div class="db"><div class="dh">${esc(day)} <span class="fc">${dayFree.length} free</span></div><div class="di">${items}</div></div>`;
   });
 

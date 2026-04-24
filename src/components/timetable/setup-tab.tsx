@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useTimetableStore } from '@/lib/store';
+import { getPeriodLabel } from '@/lib/timetable-utils';
 import type { CustomPeriodTiming } from '@/lib/types';
 import {
   Dialog,
@@ -274,7 +275,7 @@ function SchoolSettings() {
                           {pt.isBreak ? (
                             <Badge className="bg-amber-100 text-amber-800 border-amber-200">Break</Badge>
                           ) : (
-                            <span className="font-medium">P{pt.period}</span>
+                            <span className="font-medium">{getPeriodLabel(pt.period, timings)}</span>
                           )}
                         </td>
                         <td className="py-1.5 px-2 text-muted-foreground">{pt.startTime}</td>
@@ -522,7 +523,7 @@ function CustomPeriodTimingsDialog({
                 }`}
               >
                 <span className="text-sm font-medium">
-                  {pt.isBreak ? 'Break' : `P${pt.period}`}
+                  {pt.isBreak ? 'Break' : getPeriodLabel(pt.period, timings)}
                 </span>
                 <Input
                   type="time"

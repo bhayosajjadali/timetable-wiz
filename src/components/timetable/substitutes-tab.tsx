@@ -22,7 +22,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useTimetableStore } from '@/lib/store';
-import { getDayOfWeek } from '@/lib/timetable-utils';
+import { getDayOfWeek, getPeriodLabel } from '@/lib/timetable-utils';
 import { useToast } from '@/hooks/use-toast';
 import {
   UserMinus,
@@ -261,7 +261,7 @@ export function SubstitutesTab() {
                               >
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <Badge variant="outline" className="shrink-0 text-xs">
-                                    P{entry.period}
+                                    {getPeriodLabel(entry.period, timings)}
                                   </Badge>
                                   <span>{subject?.shortName || '?'}</span>
                                   <span className="text-muted-foreground">|</span>

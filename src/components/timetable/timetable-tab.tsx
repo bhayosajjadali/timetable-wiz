@@ -22,7 +22,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useTimetableStore } from '@/lib/store';
-import { getSubjectColor, getPeriodTime, isBreakPeriod } from '@/lib/timetable-utils';
+import { getSubjectColor, getPeriodTime, isBreakPeriod, getPeriodLabel } from '@/lib/timetable-utils';
 import { useToast } from '@/hooks/use-toast';
 import {
   Calendar,
@@ -206,7 +206,7 @@ function TimetableGrid({ classId, sectionId }: { classId: string; sectionId: str
     const teacher = getTeacher(selectedTeacher);
     const subject = getSubject(selectedSubject);
     const dayList = selectedDays.join(', ');
-    let msg = `${teacher?.shortName} - ${subject?.shortName} added to Period ${cellToFill.period} on: ${dayList}.`;
+    let msg = `${teacher?.shortName} - ${subject?.shortName} added to ${getPeriodLabel(cellToFill.period, timings)} on: ${dayList}.`;
     if (conflictCount > 0) {
       msg += ` (${conflictCount} conflict${conflictCount > 1 ? 's' : ''} skipped)`;
     }
@@ -284,7 +284,7 @@ function TimetableGrid({ classId, sectionId }: { classId: string; sectionId: str
                           isBreak ? 'bg-amber-100 dark:bg-amber-900/20' : ''
                         }`}
                       >
-                        <span className="text-xs font-medium">{isBreak ? 'Break' : `P${period}`}</span>
+                        <span className="text-xs font-medium">{getPeriodLabel(period, timings)}</span>
                         <span className="text-[10px] text-muted-foreground">{time}</span>
                       </div>
                       {activeDays.map((day) => {
@@ -356,7 +356,7 @@ function TimetableGrid({ classId, sectionId }: { classId: string; sectionId: str
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>
-              Add Entry — Period {cellToFill?.period}
+              Add Entry — {cellToFill ? getPeriodLabel(cellToFill.period, timings) : ''}
             </DialogTitle>
             <DialogDescription>
               Select teacher, subject, and days. Check multiple days to assign the same period across days.

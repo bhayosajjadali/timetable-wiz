@@ -1,5 +1,5 @@
 import type { Timings, Entry, CustomPeriodTiming } from './types';
-import { getPeriodTime, isBreakPeriod } from './timetable-utils';
+import { getPeriodTime, isBreakPeriod, getPeriodLabel } from './timetable-utils';
 
 // Generate custom timings from equal settings
 function generateTimingsFromEqual(timings: Timings): CustomPeriodTiming[] {
@@ -116,7 +116,7 @@ export function generatePdfHtml(opts: PdfReportOptions): string {
     // Period rows
     customTimings.forEach(pt => {
       const time = `${pt.startTime} - ${pt.endTime}`;
-      const periodLabel = pt.isBreak ? 'Break' : `P${pt.period}`;
+      const periodLabel = pt.isBreak ? 'Break' : getPeriodLabel(pt.period, timings);
       const rowClass = pt.isBreak ? 'break-row' : '';
 
       html += `<tr class="${rowClass}">`;
@@ -204,7 +204,7 @@ export function generatePdfHtml(opts: PdfReportOptions): string {
         <div class="free-items">`;
       dayFree.forEach(fp => {
         html += `<div class="free-item">
-          <span class="free-period">P${fp.period}</span>
+          <span class="free-period">${getPeriodLabel(fp.period, timings)}</span>
           <span class="free-time">${esc(fp.time)}</span>
         </div>`;
       });
