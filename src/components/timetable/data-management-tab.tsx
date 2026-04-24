@@ -762,7 +762,7 @@ function JsonBackupPanel() {
     try {
       store.replaceAllData({
         schoolName: importPreview.schoolName,
-        timings: importPreview.timings as typeof store.timings,
+        timings: importPreview.timings as unknown as typeof store.timings,
         sections: importPreview.sections,
         classes: importPreview.classes,
         teachers: importPreview.teachers,

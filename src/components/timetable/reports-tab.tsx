@@ -184,8 +184,8 @@ export function ReportsTab() {
   const [selectedTeacherIdsForFree, setSelectedTeacherIdsForFree] = useState<string[]>([]);
 
   // Toggle helpers
-  const toggleType = (type: ReportType) =>
-    setActiveTypes((prev) => prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]);
+  const toggleType = (type: string) =>
+    setActiveTypes((prev) => prev.includes(type as ReportType) ? prev.filter((t) => t !== type) : [...prev, type as ReportType]);
   const selectAllTypes = () => setActiveTypes(activeTypes.length === ALL_REPORT_TYPES.length ? [] : [...ALL_REPORT_TYPES]);
 
   const toggleItem = (setter: React.Dispatch<React.SetStateAction<string[]>>) => (value: string) =>
@@ -212,7 +212,7 @@ export function ReportsTab() {
   return (
     <ReportFilterCtx.Provider value={{ showBreaks, showEmpty, searchQuery }}>
     <div className="space-y-4">
-      {/* ── Compact top toolbar ── */
+      {/* ── Compact top toolbar ── */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex items-center gap-2 mr-auto">
           <FileText className="h-5 w-5 text-muted-foreground" />

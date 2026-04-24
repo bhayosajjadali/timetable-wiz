@@ -122,7 +122,7 @@ export function isBreakPeriod(period: number, timings: Timings): boolean {
 
 export function getEffectiveTimetable(
   entries: Entry[],
-  substitutes: { entryId: string; substituteTeacherId: string }[],
+  substitutes: { entryId: string; substituteTeacherId: string; date?: string }[],
   date?: string
 ): Entry[] {
   if (!date) return entries;
