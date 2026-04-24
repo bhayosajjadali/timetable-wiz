@@ -1,0 +1,27 @@
+{
+  "name": "Timetable Manager",
+  "short_name": "Timetable Mgr",
+  "description": "School timetable management application by Sajjad Ali",
+  "start_url": "/timetable-wiz/",
+  "scope": "/timetable-wiz/",
+  "display": "standalone",
+  "background_color": "#F2F2F7",
+  "theme_color": "#007AFF",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/timetable-wiz/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/timetable-wiz/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["education", "productivity"],
+  "prefer_related_applications": false
+}
