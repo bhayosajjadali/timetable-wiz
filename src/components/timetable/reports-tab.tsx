@@ -1527,7 +1527,7 @@ function buildClassTimetableHtml(schoolName: string, className: string, sectionN
     }
     rows += '</tr>';
   }
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${'
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${`
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: Arial, 'Helvetica Neue', sans-serif; font-size: 9pt; color: #1a1a2e; background: #fff; }
 
@@ -1602,7 +1602,7 @@ body { font-family: Arial, 'Helvetica Neue', sans-serif; font-size: 9pt; color: 
 @media print {
   body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
-'}</style></head><body>
+`}</style></head><body>
   <div class="rpt-header">
     <div class="rpt-school">${esc(schoolName)}</div>
     <div class="rpt-title">${esc(reportTitle)}</div>
@@ -1654,7 +1654,7 @@ function buildTeacherScheduleHtml(schoolName: string, teacherName: string, timin
     }
     rows += '</tr>';
   }
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${'
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${`
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: Arial, 'Helvetica Neue', sans-serif; font-size: 9pt; color: #1a1a2e; background: #fff; }
 
@@ -1729,7 +1729,7 @@ body { font-family: Arial, 'Helvetica Neue', sans-serif; font-size: 9pt; color: 
 @media print {
   body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
-'}</style></head><body>
+`}</style></head><body>
   <div class="rpt-header">
     <div class="rpt-school">${esc(schoolName)}</div>
     <div class="rpt-title">${esc(reportTitle)}</div>
@@ -1774,7 +1774,7 @@ function buildFreePeriodsHtml(schoolName: string, teacherName: string, timings: 
     const chips = df.map((fp) => `<span class="fp-chip">${getPeriodLabel(fp.period, timings)} <span>${esc(fp.time)}</span></span>`).join('');
     dayBlocks += `<div class="fp-day"><div class="fp-day-hd">${esc(day)}<span class="fc">${df.length} free</span></div><div class="fp-day-bd">${chips}</div></div>`;
   });
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${'
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${`
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: Arial, 'Helvetica Neue', sans-serif; font-size: 9pt; color: #1a1a2e; background: #fff; }
 
@@ -1849,7 +1849,7 @@ body { font-family: Arial, 'Helvetica Neue', sans-serif; font-size: 9pt; color: 
 @media print {
   body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
-'}</style></head><body>
+`}</style></head><body>
   <div class="rpt-header">
     <div class="rpt-school">${esc(schoolName)}</div>
     <div class="rpt-title">${esc(reportTitle)}</div>
