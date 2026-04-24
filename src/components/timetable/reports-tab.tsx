@@ -41,7 +41,6 @@ import {
   Filter,
   BarChart3,
   Hash,
-  Scissors,
   Settings2,
   RotateCcw,
   ChevronsUpDown,
@@ -58,15 +57,14 @@ import {
   type PrintSettings,
 } from '@/hooks/usePrintSettings';
 
-type ReportType = 'class-timetable' | 'teacher-schedule' | 'free-periods' | 'teacher-period-count' | 'cutout-timetables';
+type ReportType = 'class-timetable' | 'teacher-schedule' | 'daywise' | 'teacher-period-count';
 
-const ALL_REPORT_TYPES: ReportType[] = ['class-timetable', 'teacher-schedule', 'free-periods', 'teacher-period-count', 'cutout-timetables'];
+const ALL_REPORT_TYPES: ReportType[] = ['class-timetable', 'teacher-schedule', 'daywise', 'teacher-period-count'];
 const REPORT_TYPE_LABELS: Record<ReportType, string> = {
   'class-timetable': 'Class Timetable',
   'teacher-schedule': 'Teacher Schedule',
-  'free-periods': 'Free Periods',
+  'daywise': 'Daywise Schedule',
   'teacher-period-count': 'Period Count',
-  'cutout-timetables': 'Cut-out Timetables',
 };
 
 /* Share filter settings across reports via context */
@@ -179,9 +177,10 @@ export function ReportsTab() {
   const availableClasses = classes.filter((c) => c.sectionIds.length > 0);
 
   // Per-report-type item selections
-  const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
+  const [selectedClassSectionKeys, setSelectedClassSectionKeys] = useState<string[]>([]);
   const [selectedTeacherIdsForSchedule, setSelectedTeacherIdsForSchedule] = useState<string[]>([]);
-  const [selectedTeacherIdsForFree, setSelectedTeacherIdsForFree] = useState<string[]>([]);
+  const [selectedDayIds, setSelectedDayIds] = useState<string[]>([]);
+  const [selectedDaywiseClassSectionKeys, setSelectedDaywiseClassSectionKeys] = useState<string[]>([]);
 
   // Toggle helpers
   const toggleType = (type: string) =>
@@ -205,9 +204,33 @@ export function ReportsTab() {
     return teachers.filter((t) => t.name.toLowerCase().includes(q) || t.shortName.toLowerCase().includes(q));
   }, [teachers, searchQuery]);
 
-  const classOpts = filteredClasses.map((c) => ({ value: c.id, label: c.name }));
+  // Build flattened class+section combos
+  const classSectionOpts = useMemo(() => {
+    const opts: { value: string; label: string; classId: string; sectionId: string }[] = [];
+    for (const cls of filteredClasses) {
+      for (const sid of cls.sectionIds) {
+        const sec = sections.find((s) => s.id === sid);
+        if (sec) {
+          const key = `${cls.id}::${sid}`;
+          opts.push({ value: key, label: `${cls.name} - ${sec.name}`, classId: cls.id, sectionId: sid });
+        }
+      }
+    }
+    return opts;
+  }, [filteredClasses, sections]);
+
   const teacherOpts = filteredTeachers.map((t) => ({ value: t.id, label: `${t.name} (${t.shortName})` }));
   const typeOpts = ALL_REPORT_TYPES.map((t) => ({ value: t, label: REPORT_TYPE_LABELS[t] }));
+
+  const dayOpts = timings.days.map((d) => ({ value: d, label: d }));
+  const allClassSectionKeys = classSectionOpts.map((o) => o.value);
+  const allDayKeys = dayOpts.map((o) => o.value);
+
+  // Resolve selected combos for class timetable rendering
+  const visibleClassSections = useMemo(() => {
+    if (selectedClassSectionKeys.length === 0) return classSectionOpts;
+    return classSectionOpts.filter((o) => selectedClassSectionKeys.includes(o.value));
+  }, [selectedClassSectionKeys, classSectionOpts]);
 
   return (
     <ReportFilterCtx.Provider value={{ showBreaks, showEmpty, searchQuery }}>
@@ -261,37 +284,32 @@ export function ReportsTab() {
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div>
                 <CardTitle className="text-base flex items-center gap-2">Class Timetables</CardTitle>
-                <CardDescription>Select classes to generate timetables</CardDescription>
+                <CardDescription>Select class + section combos to generate timetables</CardDescription>
               </div>
               <CheckDropdown
                 label="Classes"
-                options={classOpts}
-                selected={selectedClassIds}
-                onToggle={toggleItem(setSelectedClassIds)}
-                onSelectAll={selectAllItems(setSelectedClassIds, classOpts.map((o) => o.value))}
+                options={classSectionOpts}
+                selected={selectedClassSectionKeys}
+                onToggle={toggleItem(setSelectedClassSectionKeys)}
+                onSelectAll={selectAllItems(setSelectedClassSectionKeys, allClassSectionKeys)}
                 allLabel="All Classes"
                 searchable
               />
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            {selectedClassIds.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-6">Select one or more classes above, or choose &quot;All Classes&quot;.</p>
+            {selectedClassSectionKeys.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-6">Select one or more class + section combos above, or choose &quot;All Classes&quot;.</p>
             )}
-            {(selectedClassIds.length > 0 ? filteredClasses.filter((c) => selectedClassIds.includes(c.id)) : filteredClasses).map((cls) =>
-              cls.sectionIds.map((sid) => {
-                const sec = sections.find((s) => s.id === sid);
-                return sec ? (
-                  <ClassTimetableReport
-                    key={`${cls.id}-${sid}`}
-                    classId={cls.id}
-                    sectionId={sid}
-                    showBreaks={showBreaks}
-                    showEmpty={showEmpty}
-                  />
-                ) : null;
-              })
-            )}
+            {visibleClassSections.map((combo) => (
+              <ClassTimetableReport
+                key={combo.value}
+                classId={combo.classId}
+                sectionId={combo.sectionId}
+                showBreaks={showBreaks}
+                showEmpty={showEmpty}
+              />
+            ))}
           </CardContent>
         </Card>
       )}
@@ -327,33 +345,49 @@ export function ReportsTab() {
         </Card>
       )}
 
-      {/* Free Periods */}
-      {activeTypes.includes('free-periods') && (
+      {/* Daywise Schedule */}
+      {activeTypes.includes('daywise') && (
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div>
-                <CardTitle className="text-base flex items-center gap-2"><Clock className="h-4 w-4" />Free Periods</CardTitle>
-                <CardDescription>Analyze teacher availability</CardDescription>
+                <CardTitle className="text-base flex items-center gap-2"><CalendarDays className="h-4 w-4" />Daywise Schedule</CardTitle>
+                <CardDescription>View timetables for selected days</CardDescription>
               </div>
-              <CheckDropdown
-                label="Teachers"
-                options={teacherOpts}
-                selected={selectedTeacherIdsForFree}
-                onToggle={toggleItem(setSelectedTeacherIdsForFree)}
-                onSelectAll={selectAllItems(setSelectedTeacherIdsForFree, teacherOpts.map((o) => o.value))}
-                allLabel="All Teachers"
-                searchable
-              />
+              <div className="flex items-center gap-2 flex-wrap">
+                <CheckDropdown
+                  label="Days"
+                  options={dayOpts}
+                  selected={selectedDayIds}
+                  onToggle={toggleItem(setSelectedDayIds)}
+                  onSelectAll={selectAllItems(setSelectedDayIds, allDayKeys)}
+                  allLabel="All Days"
+                />
+                <CheckDropdown
+                  label="Classes"
+                  options={classSectionOpts}
+                  selected={selectedDaywiseClassSectionKeys}
+                  onToggle={toggleItem(setSelectedDaywiseClassSectionKeys)}
+                  onSelectAll={selectAllItems(setSelectedDaywiseClassSectionKeys, allClassSectionKeys)}
+                  allLabel="All Classes"
+                  searchable
+                />
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            {selectedTeacherIdsForFree.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-6">Select one or more teachers above, or choose &quot;All Teachers&quot;.</p>
+            {selectedDayIds.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-6">Select one or more days above, or choose &quot;All Days&quot;.</p>
             )}
-            {(selectedTeacherIdsForFree.length > 0 ? filteredTeachers.filter((t) => selectedTeacherIdsForFree.includes(t.id)) : filteredTeachers).map((t) => (
-              <FreePeriodsReport key={t.id} teacherId={t.id} />
-            ))}
+            {selectedDayIds.length > 0 && (
+              <DaywiseScheduleReport
+                selectedDays={selectedDayIds}
+                selectedClassSectionKeys={selectedDaywiseClassSectionKeys}
+                classSectionOpts={classSectionOpts}
+                showBreaks={showBreaks}
+                showEmpty={showEmpty}
+              />
+            )}
           </CardContent>
         </Card>
       )}
@@ -361,11 +395,6 @@ export function ReportsTab() {
       {/* Period Count */}
       {activeTypes.includes('teacher-period-count') && (
         <TeacherPeriodCountReport />
-      )}
-
-      {/* Cut-out Timetables */}
-      {activeTypes.includes('cutout-timetables') && (
-        <CutoutTimetablesReport />
       )}
     </div>
     </ReportFilterCtx.Provider>
@@ -513,9 +542,9 @@ function PrintSettingsDialog({
             </p>
           </div>
 
-          {/* Sheets per page */}
+          {/* Sheets per page (vertical stack) */}
           <div className="space-y-2">
-            <Label>Pages per Sheet (N-up)</Label>
+            <Label>Sheets per Page</Label>
             <Select
               value={String(settings.sheetsPerPage)}
               onValueChange={(v) => onUpdate({ sheetsPerPage: Number(v) })}
@@ -524,13 +553,14 @@ function PrintSettingsDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="1">1 page per sheet</SelectItem>
-                <SelectItem value="2">2 pages per sheet</SelectItem>
-                <SelectItem value="4">4 pages per sheet (2 x 2)</SelectItem>
+                <SelectItem value="1">1 sheet per page</SelectItem>
+                <SelectItem value="2">2 sheets per page</SelectItem>
+                <SelectItem value="3">3 sheets per page</SelectItem>
+                <SelectItem value="4">4 sheets per page</SelectItem>
               </SelectContent>
             </Select>
             <p className="text-[10px] text-muted-foreground">
-              Fit multiple report pages on a single printed sheet
+              Multiple sheets stack vertically on one page with even spacing
             </p>
           </div>
 
@@ -733,10 +763,10 @@ function TeacherPeriodCountReport() {
           tableRows += '</tr>';
         });
 
-        const colWidth = isLandscape ? `${100 / tablesPerPage}%` : '100%';
+        const colWidth = '100%';
 
         tablesHtml += `
-          <div class="table-chunk" style="width:${colWidth};display:inline-block;vertical-align:top;">
+          <div class="table-chunk sheet-slot" style="width:${colWidth};display:block;">
             <div class="chunk-title">Table ${ci + 1}</div>
             <table class="pc-table">
               <thead><tr>
@@ -764,11 +794,6 @@ function TeacherPeriodCountReport() {
       ? `<div class="custom-footer">${esc(s.footerContent)}</div>`
       : '';
 
-    // N-up CSS
-    const nupStyle = s.sheetsPerPage > 1
-      ? `body { columns: ${s.sheetsPerPage === 4 ? 2 : s.sheetsPerPage}; column-gap: 0; column-rule: none; }`
-      : '';
-
     return `<!DOCTYPE html>
 <html>
 <head>
@@ -776,11 +801,10 @@ function TeacherPeriodCountReport() {
 <style>
   @page {
     size: A4 ${isLandscape ? 'landscape' : 'portrait'};
-    margin: ${isLandscape ? '8mm 6mm 12mm 6mm' : '12mm 10mm 16mm 10mm'};
+    margin: 12.7mm 12.7mm 12.7mm 12.7mm;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; font-size: ${fontSize}; line-height: 1.3; color: #1D1D1F; background: #fff; }
-  ${nupStyle}
 
   .report-header { text-align: center; padding-bottom: 6px; margin-bottom: 8px; border-bottom: 2px solid #007AFF; }
   .school-name { font-size: ${isLandscape ? '16px' : '14px'}; font-weight: 700; color: #1D1D1F; }
@@ -809,6 +833,8 @@ function TeacherPeriodCountReport() {
 
   .table-chunk { padding: 0 4px; }
   .chunk-title { font-size: ${headerFontSize}; font-weight: 600; text-align: center; margin-bottom: 3px; color: #333; }
+
+  .sheet-slot { width: 100%; page-break-inside: avoid; break-inside: avoid; }
 
   .summary-bar { display: flex; gap: 16px; justify-content: center; margin-top: 8px; flex-wrap: wrap; }
   .summary-item { text-align: center; padding: 4px 12px; background: #F5F5F7; border-radius: 6px; border: 1px solid #E5E5EA; }
@@ -847,7 +873,7 @@ function TeacherPeriodCountReport() {
   </div>
 </body>
 </html>`;
-  }, [teacherData, filteredSelectedDays, activeDays, orientation, tablesPerPage, detailMode, schoolName, nonBreakPeriodsCount, maxPossiblePerTeacher, teachers.length, effectiveOrientation, printSettings]);
+  }, [teacherData, filteredSelectedDays, activeDays, orientation, tablesPerPage, detailMode, schoolName, nonBreakPeriodsCount, maxPossiblePerTeacher, teachers.length, effectiveOrientation, printSettings, timings]);
 
   const handlePrint = () => {
     const html = buildReportHtml();
@@ -1128,7 +1154,7 @@ function ClassTimetableReport({ classId, sectionId, showBreaks, showEmpty }: { c
       classId, sectionId, showBreaks, showEmpty,
       printSettings
     );
-    printViaIframe(html, `${cls?.name || 'Class'}_Section_${sec?.name || ''}_Timetable`);
+    printViaIframe(html, `${cls?.name || 'Class'}_${sec?.name || ''}_Timetable`);
     toast({ title: 'Print dialog opened', description: 'Use the print dialog to print or save as PDF.' });
   };
 
@@ -1139,7 +1165,7 @@ function ClassTimetableReport({ classId, sectionId, showBreaks, showEmpty }: { c
       classId, sectionId, showBreaks, showEmpty,
       printSettings
     );
-    await downloadPdf(html, `${cls?.name || 'Class'}_Section_${sec?.name || ''}_Timetable.pdf`, printSettings.orientation);
+    await downloadPdf(html, `${cls?.name || 'Class'}_${sec?.name || ''}_Timetable.pdf`, printSettings.orientation);
   };
 
   const visiblePeriods = useMemo(() => {
@@ -1163,7 +1189,7 @@ function ClassTimetableReport({ classId, sectionId, showBreaks, showEmpty }: { c
       <CardHeader>
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div>
-            <CardTitle className="text-lg">{cls?.name} — Section {sec?.name}</CardTitle>
+            <CardTitle className="text-lg">{cls?.name} — {sec?.name}</CardTitle>
             <CardDescription>Weekly timetable report</CardDescription>
           </div>
           <div className="flex gap-2 flex-wrap">
@@ -1332,128 +1358,53 @@ function TeacherScheduleReport({ teacherId, showBreaks, showEmpty }: { teacherId
   );
 }
 
-/* ===== Free Periods Report ===== */
+/* ===== Daywise Schedule Report ===== */
 
-function FreePeriodsReport({ teacherId }: { teacherId: string }) {
-  const { entries, timings, schoolName, teachers, classes, sections, subjects } = useTimetableStore();
+function DaywiseScheduleReport({
+  selectedDays,
+  selectedClassSectionKeys,
+  classSectionOpts,
+  showBreaks,
+  showEmpty,
+}: {
+  selectedDays: string[];
+  selectedClassSectionKeys: string[];
+  classSectionOpts: { value: string; label: string; classId: string; sectionId: string }[];
+  showBreaks: boolean;
+  showEmpty: boolean;
+}) {
+  const { entries, teachers, subjects, timings, schoolName, classes, sections } = useTimetableStore();
   const { toast } = useToast();
   const { downloadPdf, isGenerating } = usePdfDownload();
   const { settings: printSettings, updateSettings, resetSettings } = usePrintSettings();
 
   const activeDays = timings.days;
-  const teacher = teachers.find((t) => t.id === teacherId);
+  const filteredSelectedDays = activeDays.filter((d) => selectedDays.includes(d));
 
-  const teacherEntries = useMemo(() => entries.filter((e) => e.teacherId === teacherId), [entries, teacherId]);
-
-  const freePeriods = useMemo(() => {
-    const result: { day: string; period: number; time: string }[] = [];
-    activeDays.forEach((day) => {
-      for (let period = 1; period <= timings.periodsPerDay; period++) {
-        if (isBreakPeriod(period, timings)) continue;
-        const hasEntry = teacherEntries.some((e) => e.day === day && e.period === period);
-        if (!hasEntry) result.push({ day, period, time: getPeriodTime(period, timings) });
-      }
-    });
-    return result;
-  }, [teacherEntries, activeDays, timings]);
-
-  const groupedByDay = useMemo(() => {
-    const map = new Map<string, typeof freePeriods>();
-    freePeriods.forEach((fp) => { const list = map.get(fp.day) || []; list.push(fp); map.set(fp.day, list); });
-    return map;
-  }, [freePeriods]);
-
-  const totalFreePeriods = freePeriods.length;
-  const breakCount = timings.periodTimingMode === 'custom'
-    ? timings.customPeriodTimings.filter((pt) => pt.isBreak).length
-    : (timings.breakAfterPeriod > 0 ? 1 : 0);
-  const totalPeriods = activeDays.length * (timings.periodsPerDay - breakCount);
+  // Resolve visible combos
+  const visibleCombos = useMemo(() => {
+    if (selectedClassSectionKeys.length === 0) return classSectionOpts;
+    return classSectionOpts.filter((o) => selectedClassSectionKeys.includes(o.value));
+  }, [selectedClassSectionKeys, classSectionOpts]);
 
   const handlePrint = () => {
-    const html = buildFreePeriodsHtml(schoolName, teacher?.name || 'Teacher', timings, entries, teachers, classes, sections, subjects, teacherId, printSettings);
-    printViaIframe(html, `${teacher?.shortName || 'Teacher'}_Free_Periods`);
+    const html = buildDaywiseScheduleHtml(
+      schoolName, filteredSelectedDays, visibleCombos,
+      timings, entries, teachers, classes, sections, subjects,
+      showBreaks, showEmpty, printSettings
+    );
+    printViaIframe(html, 'Daywise_Schedule');
     toast({ title: 'Print dialog opened', description: 'Use the print dialog to print or save as PDF.' });
   };
 
   const handlePdf = async () => {
-    const html = buildFreePeriodsHtml(schoolName, teacher?.name || 'Teacher', timings, entries, teachers, classes, sections, subjects, teacherId, printSettings);
-    await downloadPdf(html, `${teacher?.shortName || 'Teacher'}_Free_Periods.pdf`, printSettings.orientation);
-  };
-
-  return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <div>
-            <CardTitle className="text-lg flex items-center gap-2"><Clock className="h-4 w-4" />Free Periods — {teacher?.name}</CardTitle>
-            <CardDescription>{totalFreePeriods} free period{totalFreePeriods !== 1 ? 's' : ''} out of {totalPeriods} total ({totalPeriods > 0 ? Math.round((totalFreePeriods / totalPeriods) * 100) : 0}% free)</CardDescription>
-          </div>
-          <div className="flex gap-2 flex-wrap">
-            <Button variant="outline" size="sm" onClick={handlePrint}><Printer className="h-4 w-4 mr-1.5" />Print</Button>
-            <Button size="sm" onClick={handlePdf} disabled={isGenerating}>
-              {isGenerating ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Download className="h-4 w-4 mr-1.5" />}
-              Download PDF
-            </Button>
-            <PrintSettingsDialog settings={printSettings} onUpdate={updateSettings} onReset={resetSettings}>
-              <Button variant="outline" size="sm">
-                <Settings2 className="h-4 w-4 mr-1.5" />
-                Print Settings
-              </Button>
-            </PrintSettingsDialog>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent>
-        {freePeriods.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-8">No free periods found. This teacher is fully occupied.</p>
-        ) : (
-          <div className="space-y-3 max-h-96 overflow-y-auto">
-            {activeDays.map((day) => {
-              const dayFree = groupedByDay.get(day);
-              if (!dayFree || dayFree.length === 0) return null;
-              return (
-                <div key={day} className="rounded-lg border bg-card p-4">
-                  <div className="flex items-center gap-2 mb-2"><CalendarDays className="h-4 w-4 text-muted-foreground" /><span className="font-medium">{day}</span><Badge variant="secondary">{dayFree.length} free</Badge></div>
-                  <div className="flex flex-wrap gap-2">
-                    {dayFree.map((fp) => (
-                      <div key={`${fp.day}-${fp.period}`} className="px-3 py-1.5 rounded-md bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-sm">
-                        <span className="font-medium">Period {fp.period}</span>
-                        <span className="text-muted-foreground ml-2 text-xs">{fp.time}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-/* ===== Cut-out Teacher Timetables Report ===== */
-
-function CutoutTimetablesReport() {
-  const { entries, teachers, timings, schoolName, classes, sections, subjects } = useTimetableStore();
-  const { toast } = useToast();
-  const { downloadPdf, isGenerating } = usePdfDownload();
-  const { settings: printSettings, updateSettings, resetSettings } = usePrintSettings();
-
-  const activeDays = timings.days;
-  const [selectedTeacherIds, setSelectedTeacherIds] = useState<string[]>([]);
-  const [tablesPerSheet, setTablesPerSheet] = useState<number>(2);
-  const [showBreaks, setShowBreaks] = useState(false);
-  const [showEmpty, setShowEmpty] = useState(true);
-
-  const toggleTeacher = (id: string) => {
-    setSelectedTeacherIds((prev) =>
-      prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]
+    const html = buildDaywiseScheduleHtml(
+      schoolName, filteredSelectedDays, visibleCombos,
+      timings, entries, teachers, classes, sections, subjects,
+      showBreaks, showEmpty, printSettings
     );
+    await downloadPdf(html, `Daywise_Schedule_${new Date().toISOString().slice(0, 10)}.pdf`, printSettings.orientation);
   };
-
-  const selectAll = () => setSelectedTeacherIds(teachers.map((t) => t.id));
-  const selectNone = () => setSelectedTeacherIds([]);
 
   const visiblePeriods = useMemo(() => {
     const periods: number[] = [];
@@ -1461,453 +1412,91 @@ function CutoutTimetablesReport() {
       const isBreak = isBreakPeriod(p, timings);
       if (isBreak && !showBreaks) continue;
       if (!isBreak && !showEmpty) {
-        const hasAnyEntry = activeDays.some((day) =>
-          entries.some((e) => {
-            if (!selectedTeacherIds.includes(e.teacherId)) return false;
-            return e.day === day && e.period === p;
-          })
+        const hasAnyEntry = filteredSelectedDays.some((day) =>
+          visibleCombos.some((combo) =>
+            entries.some((e) => e.day === day && e.period === p && e.classId === combo.classId && e.sectionId === combo.sectionId)
+          )
         );
         if (!hasAnyEntry) continue;
       }
       periods.push(p);
     }
     return periods;
-  }, [timings, showBreaks, showEmpty, activeDays, entries, selectedTeacherIds]);
-
-  const teacherSchedules = useMemo(() => {
-    return selectedTeacherIds.map((teacherId) => {
-      const teacher = teachers.find((t) => t.id === teacherId);
-      if (!teacher) return null;
-      const teacherEntries = entries.filter((e) => e.teacherId === teacherId);
-
-      const schedule: Record<string, Record<number, { subject: string; cls: string; sec: string }>> = {};
-      for (const day of activeDays) {
-        schedule[day] = {};
-        for (const period of visiblePeriods) {
-          const entry = teacherEntries.find((e) => e.day === day && e.period === period);
-          if (entry) {
-            const subj = subjects.find((s) => s.id === entry.subjectId);
-            const cls = classes.find((c) => c.id === entry.classId);
-            const sec = sections.find((s) => s.id === entry.sectionId);
-            schedule[day][period] = {
-              subject: subj?.shortName || '?',
-              cls: cls?.name || '?',
-              sec: sec?.name || '?',
-            };
-          }
-        }
-      }
-
-      return { teacher, schedule };
-    }).filter(Boolean);
-  }, [selectedTeacherIds, teachers, entries, activeDays, visiblePeriods, subjects, classes, sections]);
-
-  const selectedCount = selectedTeacherIds.length;
-
-  // Build print HTML
-  const buildCutoutHtml = useCallback(() => {
-    const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-    const s = printSettings;
-
-    const layouts: Record<number, { cols: number; rows: number; fontSize: string; headerFontSize: string; nameFontSize: string; cellPad: string; dayAbbrev: boolean }> = {
-      1: { cols: 1, rows: 1, fontSize: '9px', headerFontSize: '8px', nameFontSize: '14px', cellPad: '3px 4px', dayAbbrev: false },
-      2: { cols: 1, rows: 2, fontSize: '7px', headerFontSize: '6.5px', nameFontSize: '11px', cellPad: '2px 3px', dayAbbrev: true },
-      4: { cols: 2, rows: 2, fontSize: '6px', headerFontSize: '5.5px', nameFontSize: '9px', cellPad: '1px 2px', dayAbbrev: true },
-      6: { cols: 2, rows: 3, fontSize: '5px', headerFontSize: '4.5px', nameFontSize: '7.5px', cellPad: '1px 1.5px', dayAbbrev: true },
-      8: { cols: 2, rows: 4, fontSize: '4.5px', headerFontSize: '4px', nameFontSize: '6.5px', cellPad: '0.5px 1px', dayAbbrev: true },
-    };
-
-    const layout = layouts[tablesPerSheet] || layouts[2];
-    const { cols, rows, fontSize, headerFontSize, nameFontSize, cellPad, dayAbbrev } = layout;
-
-    const gridCols = cols === 1 ? '1fr' : `1fr 1fr`;
-    const boxGap = tablesPerSheet <= 2 ? '12px' : tablesPerSheet <= 4 ? '8px' : '5px';
-    const boxPadding = tablesPerSheet <= 2 ? '10px' : tablesPerSheet <= 4 ? '6px' : '4px';
-
-    const perPage = cols * rows;
-    const pages: typeof teacherSchedules[] = [];
-    for (let i = 0; i < teacherSchedules.length; i += perPage) {
-      pages.push(teacherSchedules.slice(i, i + perPage));
-    }
-
-    const buildTeacherBox = (item: NonNullable<typeof teacherSchedules[0]>) => {
-      const { teacher, schedule } = item;
-      const dayLabel = (d: string) => dayAbbrev ? d.slice(0, 3) : d;
-
-      let tableHtml = '';
-      tableHtml += `<tr><th class="ct-corner"></th>`;
-      for (const day of activeDays) {
-        tableHtml += `<th class="ct-day">${esc(dayLabel(day))}</th>`;
-      }
-      tableHtml += `</tr>`;
-
-      for (const period of visiblePeriods) {
-        const isBreak = isBreakPeriod(period, timings);
-        if (isBreak) {
-          tableHtml += `<tr><td class="ct-period ct-break" colspan="${activeDays.length + 1}">Break</td></tr>`;
-          continue;
-        }
-        const time = getPeriodTime(period, timings);
-        tableHtml += `<tr><td class="ct-period">${esc(getPeriodLabel(period, timings))}<br><span class="ct-time">${esc(time)}</span></td>`;
-        for (const day of activeDays) {
-          const cell = schedule[day]?.[period];
-          if (cell) {
-            tableHtml += `<td class="ct-cell ct-filled">${esc(cell.cls)}-${esc(cell.sec)}<br><strong>${esc(cell.subject)}</strong></td>`;
-          } else {
-            tableHtml += `<td class="ct-cell ct-empty">-</td>`;
-          }
-        }
-        tableHtml += `</tr>`;
-      }
-
-      return `
-        <div class="ct-box">
-          <div class="ct-name">${esc(teacher.name)}</div>
-          <table class="ct-table">${tableHtml}</table>
-        </div>`;
-    };
-
-    let allPagesHtml = '';
-    pages.forEach((page, pi) => {
-      allPagesHtml += `<div class="ct-page">`;
-      page.forEach((item) => {
-        if (item) allPagesHtml += buildTeacherBox(item);
-      });
-      allPagesHtml += `</div>`;
-      if (pi < pages.length - 1) allPagesHtml += `<div class="page-break"></div>`;
-    });
-
-    const totalPages = pages.length;
-
-    // Custom header / footer
-    const customHeaderHtml = s.headerContent
-      ? `<div class="custom-header">${esc(s.headerContent)}</div>`
-      : '';
-    const customFooterHtml = s.footerContent
-      ? `<div class="custom-footer">${esc(s.footerContent)}</div>`
-      : '';
-
-    return `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<style>
-  @page {
-    size: A4 portrait;
-    margin: 8mm;
-  }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; font-size: ${fontSize}; line-height: 1.2; color: #1D1D1F; background: #fff; }
-
-  .ct-page {
-    display: grid;
-    grid-template-columns: ${gridCols};
-    gap: ${boxGap};
-    width: 100%;
-    min-height: 270mm;
-    align-content: start;
-  }
-
-  .ct-box {
-    border: 2px dashed #999;
-    border-radius: 10px;
-    padding: ${boxPadding};
-    page-break-inside: avoid;
-    break-inside: avoid;
-    background: #FAFAFA;
-  }
-
-  .ct-name {
-    text-align: center;
-    font-size: ${nameFontSize};
-    font-weight: 800;
-    color: #CC0000;
-    margin-bottom: 4px;
-    padding-bottom: 3px;
-    border-bottom: 1.5px solid #CC000040;
-    letter-spacing: 0.3px;
-  }
-
-  .ct-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: ${fontSize};
-    table-layout: fixed;
-  }
-
-  .ct-table th, .ct-table td {
-    border: 1px solid #CCC;
-    padding: ${cellPad};
-    text-align: center;
-    vertical-align: middle;
-  }
-
-  .ct-corner { width: 28px; background: #F0F0F0; font-size: ${headerFontSize}; font-weight: 600; }
-  .ct-day { background: #E8E8ED; font-size: ${headerFontSize}; font-weight: 700; color: #333; }
-  .ct-period { background: #F5F5F7; font-size: ${headerFontSize}; font-weight: 600; text-align: center; white-space: nowrap; }
-  .ct-time { font-size: ${tablesPerSheet <= 2 ? '5px' : '4px'}; color: #888; font-weight: 400; }
-  .ct-break { background: #FFF8E1 !important; font-size: ${headerFontSize}; color: #F57F17; text-align: center; }
-  .ct-cell { font-size: ${fontSize}; height: ${tablesPerSheet <= 2 ? '22px' : tablesPerSheet <= 4 ? '16px' : '12px'}; }
-  .ct-filled { background: #FFFFFF; }
-  .ct-empty { background: #F9F9F9; color: #CCC; }
-
-  .page-break { page-break-after: always; break-after: page; }
-
-  .report-header { text-align: center; padding-bottom: 4px; margin-bottom: 6px; border-bottom: 2px solid #007AFF; }
-  .school-name { font-size: 12px; font-weight: 700; color: #1D1D1F; }
-  .report-title { font-size: 9px; font-weight: 600; color: #555; margin-top: 1px; }
-  .custom-header { text-align: center; font-size: 7px; color: #555; font-style: italic; margin-bottom: 2px; }
-  .custom-footer { text-align: center; font-size: 7px; color: #555; font-style: italic; margin-top: 2px; }
-  .report-footer { margin-top: 6px; padding-top: 4px; border-top: 1px solid #DDD; display: flex; justify-content: space-between; font-size: 7px; color: #999; }
-
-  @media print {
-    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .ct-box { border-color: #666; }
-  }
-</style>
-</head>
-<body>
-  <div class="report-header">
-    <div class="school-name">${esc(schoolName)}</div>
-    <div class="report-title">Individual Teacher Timetables — Ready to Cut</div>
-    ${customHeaderHtml}
-  </div>
-
-  ${allPagesHtml}
-
-  ${customFooterHtml}
-  <div class="report-footer">
-    <span>${esc(today)}</span>
-    <span>${teacherSchedules.length} teachers | ${tablesPerSheet} per sheet | ${totalPages} pages</span>
-  </div>
-</body>
-</html>`;
-  }, [teacherSchedules, tablesPerSheet, activeDays, visiblePeriods, schoolName, timings, printSettings]);
-
-  const handlePrint = () => {
-    if (selectedTeacherIds.length === 0) {
-      toast({ title: 'No teachers selected', description: 'Please select at least one teacher to print.', variant: 'destructive' });
-      return;
-    }
-    const html = buildCutoutHtml();
-    printViaIframe(html, 'Cutout_Teacher_Timetables');
-    toast({ title: 'Print dialog opened', description: `${selectedTeacherIds.length} teacher(s) scheduled for print.` });
-  };
-
-  const handlePdf = async () => {
-    if (selectedTeacherIds.length === 0) {
-      toast({ title: 'No teachers selected', description: 'Please select at least one teacher.', variant: 'destructive' });
-      return;
-    }
-    const html = buildCutoutHtml();
-    await downloadPdf(html, `Cutout_Timetables_${new Date().toISOString().slice(0, 10)}.pdf`, 'portrait');
-  };
-
-  const previewTeachers = teacherSchedules.slice(0, 3);
+  }, [timings, showBreaks, showEmpty, filteredSelectedDays, entries, visibleCombos]);
 
   return (
     <div className="space-y-4">
-      {/* Controls Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Scissors className="h-5 w-5" />
-            Cut-out Teacher Timetables
-          </CardTitle>
-          <CardDescription>
-            Print individual box-shaped timetables for each teacher — ready to cut and hand out
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Teacher Selection */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Select Teachers ({selectedCount} selected)
-              </Label>
-              <div className="flex gap-2">
-                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={selectAll}>
-                  Select All
-                </Button>
-                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={selectNone}>
-                  Clear
-                </Button>
-              </div>
-            </div>
-            <div className="max-h-48 overflow-y-auto rounded-lg border p-2 space-y-1 bg-muted/30">
-              {teachers.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">No teachers added yet. Go to Setup to add teachers.</p>
-              ) : (
-                teachers.map((t) => (
-                  <label
-                    key={t.id}
-                    className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-colors text-sm ${
-                      selectedTeacherIds.includes(t.id)
-                        ? 'bg-[#FF000008] border border-[#FF000020] text-[#FF0000] font-medium'
-                        : 'hover:bg-muted/60 text-muted-foreground'
-                    }`}
-                  >
-                    <Checkbox checked={selectedTeacherIds.includes(t.id)} onCheckedChange={() => toggleTeacher(t.id)} />
-                    <span>{t.name}</span>
-                    <span className="text-xs text-muted-foreground ml-auto">({t.shortName})</span>
-                  </label>
-                ))
-              )}
-            </div>
-          </div>
+      {/* Action buttons */}
+      <div className="flex gap-2 flex-wrap">
+        <Button variant="outline" size="sm" onClick={handlePrint}>
+          <Printer className="h-4 w-4 mr-1.5" />
+          Print
+        </Button>
+        <Button size="sm" onClick={handlePdf} disabled={isGenerating}>
+          {isGenerating ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Download className="h-4 w-4 mr-1.5" />}
+          Download PDF
+        </Button>
+        <PrintSettingsDialog settings={printSettings} onUpdate={updateSettings} onReset={resetSettings}>
+          <Button variant="outline" size="sm">
+            <Settings2 className="h-4 w-4 mr-1.5" />
+            Print Settings
+          </Button>
+        </PrintSettingsDialog>
+      </div>
 
-          <Separator />
-
-          {/* Layout Options */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Tables Per Sheet (A4 Portrait)</Label>
-              <Select value={String(tablesPerSheet)} onValueChange={(v) => setTablesPerSheet(Number(v))}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1">1 table per sheet (Large)</SelectItem>
-                  <SelectItem value="2">2 tables per sheet (Medium)</SelectItem>
-                  <SelectItem value="4">4 tables per sheet (2x2)</SelectItem>
-                  <SelectItem value="6">6 tables per sheet (2x3)</SelectItem>
-                  <SelectItem value="8">8 tables per sheet (2x4)</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-[10px] text-muted-foreground">
-                More tables per sheet = smaller size, more teachers per page
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Display Options</Label>
-              <div className="space-y-2 pt-1">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <Checkbox checked={showBreaks} onCheckedChange={(v) => setShowBreaks(!!v)} />
-                  <span className="text-sm">Show Break Periods</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <Checkbox checked={showEmpty} onCheckedChange={(v) => setShowEmpty(!!v)} />
-                  <span className="text-sm">Show Empty Slots</span>
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <Separator />
-
-          {/* Action buttons */}
-          <div className="flex gap-2 flex-wrap">
-            <Button variant="outline" onClick={handlePrint} disabled={selectedCount === 0}>
-              <Printer className="h-4 w-4 mr-1.5" />
-              Print ({selectedCount})
-            </Button>
-            <Button onClick={handlePdf} disabled={selectedCount === 0 || isGenerating}>
-              {isGenerating ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Download className="h-4 w-4 mr-1.5" />}
-              Download PDF
-            </Button>
-            <PrintSettingsDialog settings={printSettings} onUpdate={updateSettings} onReset={resetSettings}>
-              <Button variant="outline" size="sm">
-                <Settings2 className="h-4 w-4 mr-1.5" />
-                Print Settings
-              </Button>
-            </PrintSettingsDialog>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Preview */}
-      {selectedCount > 0 && (
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div>
-                <CardTitle className="text-lg">Preview</CardTitle>
-                <CardDescription>
-                  Showing {previewTeachers.length} of {selectedCount} selected teacher(s) | {tablesPerSheet} per A4 sheet
-                </CardDescription>
-              </div>
-              <Badge variant="secondary" className="gap-1">
-                <Scissors className="h-3 w-3" />
-                {Math.ceil(selectedCount / tablesPerSheet)} page(s) needed
-              </Badge>
-            </div>
+      {/* Render cards for each selected day */}
+      {filteredSelectedDays.map((day) => (
+        <Card key={day}>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <CalendarDays className="h-4 w-4" />
+              {day}
+            </CardTitle>
+            <CardDescription>
+              {visibleCombos.length} class{visibleCombos.length !== 1 ? 'es' : ''}
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-4" style={{ gridTemplateColumns: tablesPerSheet <= 2 ? '1fr' : '1fr 1fr' }}>
-              {previewTeachers.map((item) => {
-                if (!item) return null;
-                const { teacher, schedule } = item;
-                return (
-                  <div
-                    key={teacher.id}
-                    className="border-2 border-dashed border-gray-400 rounded-xl p-3 bg-[#FAFAFA]"
-                  >
-                    <div className="text-center font-extrabold text-red-600 text-sm mb-2 pb-1 border-b border-red-200">
-                      {teacher.name}
+            <div className="overflow-x-auto">
+              <div className="min-w-[600px]">
+                <div className="grid gap-px bg-border rounded-lg overflow-hidden" style={{ gridTemplateColumns: '100px repeat(' + visibleCombos.length + ', 1fr)' }}>
+                  <div className="bg-muted p-2 text-center text-xs font-medium text-muted-foreground flex items-center justify-center">Period</div>
+                  {visibleCombos.map((combo) => (
+                    <div key={combo.value} className="bg-muted p-2 text-center text-xs font-medium text-muted-foreground">
+                      {combo.label}
                     </div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full border-collapse text-[10px]">
-                        <thead>
-                          <tr>
-                            <th className="border px-1 py-1 bg-muted text-[9px] font-semibold w-12">Day/P</th>
-                            {activeDays.map((day) => (
-                              <th key={day} className="border px-1 py-1 bg-[#E8E8ED] text-[9px] font-bold">{day.slice(0, 3)}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {visiblePeriods.map((period) => {
-                            const isBreak = isBreakPeriod(period, timings);
-                            if (isBreak) {
-                              return (
-                                <tr key={`break-${period}`}>
-                                  <td colSpan={activeDays.length + 1} className="border px-1 py-0.5 bg-amber-50 text-center text-[9px] text-amber-600">
-                                    Break
-                                  </td>
-                                </tr>
-                              );
-                            }
-                            const time = getPeriodTime(period, timings);
-                            return (
-                              <tr key={period}>
-                                <td className="border px-1 py-0.5 bg-muted text-center text-[8px] font-semibold whitespace-nowrap">
-                                  {getPeriodLabel(period, timings)}<br /><span className="text-[7px] text-muted-foreground">{time}</span>
-                                </td>
-                                {activeDays.map((day) => {
-                                  const cell = schedule[day]?.[period];
-                                  if (cell) {
-                                    return (
-                                      <td key={day} className="border px-1 py-0.5 bg-white text-center">
-                                        <div className="text-[7px] text-muted-foreground">{cell.cls}-{cell.sec}</div>
-                                        <div className="font-bold text-[9px]">{cell.subject}</div>
-                                      </td>
-                                    );
-                                  }
-                                  return (
-                                    <td key={day} className="border px-1 py-0.5 bg-[#F9F9F9] text-center text-muted-foreground/40">
-                                      -
-                                    </td>
-                                  );
-                                })}
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                );
-              })}
+                  ))}
+                  {visiblePeriods.map((period) => {
+                    const isBreak = isBreakPeriod(period, timings);
+                    const time = getPeriodTime(period, timings);
+                    return (
+                      <div key={`row-${day}-${period}`}>
+                        <div className={`bg-muted/50 p-2 flex flex-col items-center justify-center gap-0.5 ${isBreak ? 'bg-amber-100 dark:bg-amber-900/20' : ''}`}>
+                          <span className="text-xs font-medium">{getPeriodLabel(period, timings)}</span>
+                          <span className="text-[10px] text-muted-foreground">{time}</span>
+                        </div>
+                        {visibleCombos.map((combo) => {
+                          const entry = entries.find((e) => e.day === day && e.period === period && e.classId === combo.classId && e.sectionId === combo.sectionId);
+                          const teacher = entry ? teachers.find((t) => t.id === entry.teacherId) : null;
+                          const subject = entry ? subjects.find((s) => s.id === entry.subjectId) : null;
+                          const colors = entry ? getSubjectColor(entry.subjectId) : null;
+                          if (isBreak) return <div key={`${combo.value}-${period}`} className="bg-amber-50 dark:bg-amber-950/10 p-2 flex items-center justify-center"><Coffee className="h-3 w-3 text-amber-400" /></div>;
+                          if (!entry && !showEmpty) return <div key={`${combo.value}-${period}`} className="bg-card p-2 min-h-[48px]" />;
+                          return (
+                            <div key={`${combo.value}-${period}`} className={`p-2 min-h-[48px] flex flex-col items-center justify-center ${entry ? `${colors?.bg || ''} ${colors?.border || ''} border` : 'bg-card'}`}>
+                              {entry ? (<><span className={`text-xs font-semibold ${colors?.text || ''}`}>{subject?.shortName || '?'}</span><span className="text-[10px] text-muted-foreground">{teacher?.name}</span></>) : (<span className="text-[10px] text-muted-foreground/40">—</span>)}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
-            {selectedCount > 3 && (
-              <p className="text-xs text-muted-foreground text-center mt-3">
-                + {selectedCount - 3} more teacher(s) not shown in preview
-              </p>
-            )}
           </CardContent>
         </Card>
-      )}
+      ))}
     </div>
   );
 }
@@ -1921,15 +1510,39 @@ function esc(str: string): string {
 /* ---------- Shared professional CSS for timetable grid reports ---------- */
 
 function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string {
-  const margin = isLandscape ? '10mm 8mm 14mm 8mm' : '14mm 10mm 18mm 10mm';
-  const nupStyle = sheetsPerPage > 1
-    ? `\n  body.sheets-nup-2 { columns: 2; column-gap: 0; column-rule: none; }
-     body.sheets-nup-4 { columns: 2; column-gap: 0; column-rule: none; }`
-    : '';
+  /* 0.5 inch = 12.7mm. Margins: left 0.5", right 0.5", bottom 0.5", top 12.7mm. */
+  const pageH = isLandscape ? '210mm' : '297mm';
+  const availH = `calc(${pageH} - 12.7mm - 12.7mm - 12mm)`; /* page - top margin - bottom margin - footer reserved */
+  const sheetMaxH = sheetsPerPage > 1 ? `calc(${availH} / ${sheetsPerPage} - 8px)` : 'none';
+  const nUpCss = sheetsPerPage > 1 ? `
+  body.sheets-multi {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  body.sheets-multi .sheet-slot {
+    flex: 0 0 auto;
+    max-height: ${sheetMaxH};
+    overflow: hidden;
+    page-break-inside: avoid;
+    break-inside: avoid;
+    border: 1px solid #D1D1D6;
+    border-radius: 4px;
+    padding: 6px 8px;
+  }
+  body.sheets-multi .sheet-slot:nth-child(${sheetsPerPage}n) {
+    page-break-after: always;
+    break-after: page;
+  }
+  body.sheets-multi .sheet-slot:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }` : '\n  body.sheets-multi .sheet-slot { width: 100%; }';
+
   return `
   @page {
     size: A4 ${isLandscape ? 'landscape' : 'portrait'};
-    margin: ${margin};
+    margin: 12.7mm 12.7mm 12.7mm 12.7mm;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -1938,7 +1551,7 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
     color: #1D1D1F;
     background: #fff;
   }
-  ${nupStyle}
+  ${nUpCss}
 
   /* ── Page header ── */
   .page-header {
@@ -1964,7 +1577,7 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
     color: #86868B;
   }
   .page-footer .f-left   { display: table-cell; text-align: left;   width: 33%; }
-  .page-footer .f-center { display: table-cell; text-align: center; width: 34%; }
+  .page-footer .f-center { display: table-cell; text-align: center; width: 34%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .page-footer .f-right  { display: table-cell; text-align: right;  width: 33%; }
   .custom-footer { text-align: center; font-size: 8px; color: #666; font-style: italic; margin-top: 6px; }
 
@@ -2014,7 +1627,7 @@ function buildClassTimetableHtml(
   const filteredEntries = entries.filter((e: any) => e.classId === classId && e.sectionId === sectionId);
   const genTime = new Date().toLocaleString('en-PK', { dateStyle: 'medium', timeStyle: 'short' });
   const reportTitle = 'Class Timetable';
-  const subtitle = `${className} \u2014 Section ${sectionName}`;
+  const subtitle = `${className} — ${sectionName}`;
 
   const getT = (id: string) => teachers.find((t: any) => t.id === id);
   const getS = (id: string) => subjects.find((s: any) => s.id === id);
@@ -2049,25 +1662,25 @@ function buildClassTimetableHtml(
   const customFooterHtml = s.footerContent
     ? `<div class="custom-footer">${esc(s.footerContent)}</div>`
     : '';
-  const bodyClass = s.sheetsPerPage > 1 ? ` class="sheets-nup-${s.sheetsPerPage}"` : '';
+  const bodyClass = s.sheetsPerPage > 1 ? ' class="sheets-multi"' : '';
+
+  const tableHtml = `<table class="tt">
+    <thead><tr><th>Day / Period</th>${activeDays.map((d: string) => `<th>${esc(d)}</th>`).join('')}</tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+
+  const sheetContent = s.sheetsPerPage > 1
+    ? `<div class="sheet-slot"><div class="page-header"><div class="school-name">${esc(schoolName)}</div><div class="report-title">${esc(reportTitle)}</div><div class="report-sub">${esc(subtitle)}</div>${customHeaderHtml}</div>${tableHtml}</div>`
+    : `<div class="page-header"><div class="school-name">${esc(schoolName)}</div><div class="report-title">${esc(reportTitle)}</div><div class="report-sub">${esc(subtitle)}</div>${customHeaderHtml}</div>${tableHtml}`;
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${buildTimetableCss(isLandscape, s.sheetsPerPage)}</style></head>
 <body${bodyClass}>
-  <div class="page-header">
-    <div class="school-name">${esc(schoolName)}</div>
-    <div class="report-title">${esc(reportTitle)}</div>
-    <div class="report-sub">${esc(subtitle)}</div>
-    ${customHeaderHtml}
-  </div>
+  ${sheetContent}
   <div class="page-footer">
     <span class="f-left">${esc(genTime)}</span>
     <span class="f-center">${esc(schoolName)} &mdash; ${esc(reportTitle)}</span>
     <span class="f-right">Page: 1 of 1</span>
   </div>
-  <table class="tt">
-    <thead><tr><th>Day / Period</th>${activeDays.map((d: string) => `<th>${esc(d)}</th>`).join('')}</tr></thead>
-    <tbody>${rows}</tbody>
-  </table>
   ${customFooterHtml}
 </body></html>`;
 }
@@ -2122,70 +1735,92 @@ function buildTeacherScheduleHtml(
   const customFooterHtml = s.footerContent
     ? `<div class="custom-footer">${esc(s.footerContent)}</div>`
     : '';
-  const bodyClass = s.sheetsPerPage > 1 ? ` class="sheets-nup-${s.sheetsPerPage}"` : '';
+  const bodyClass = s.sheetsPerPage > 1 ? ' class="sheets-multi"' : '';
+
+  const tableHtml = `<table class="tt">
+    <thead><tr><th>Day / Period</th>${activeDays.map((d: string) => `<th>${esc(d)}</th>`).join('')}</tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+
+  const sheetContent = s.sheetsPerPage > 1
+    ? `<div class="sheet-slot"><div class="page-header"><div class="school-name">${esc(schoolName)}</div><div class="report-title">${esc(reportTitle)}</div><div class="report-sub">${esc(teacherName)}</div>${customHeaderHtml}</div>${tableHtml}</div>`
+    : `<div class="page-header"><div class="school-name">${esc(schoolName)}</div><div class="report-title">${esc(reportTitle)}</div><div class="report-sub">${esc(teacherName)}</div>${customHeaderHtml}</div>${tableHtml}`;
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${buildTimetableCss(isLandscape, s.sheetsPerPage)}</style></head>
 <body${bodyClass}>
-  <div class="page-header">
-    <div class="school-name">${esc(schoolName)}</div>
-    <div class="report-title">${esc(reportTitle)}</div>
-    <div class="report-sub">${esc(teacherName)}</div>
-    ${customHeaderHtml}
-  </div>
+  ${sheetContent}
   <div class="page-footer">
     <span class="f-left">${esc(genTime)}</span>
     <span class="f-center">${esc(schoolName)} &mdash; ${esc(reportTitle)}</span>
     <span class="f-right">Page: 1 of 1</span>
   </div>
-  <table class="tt">
-    <thead><tr><th>Day / Period</th>${activeDays.map((d: string) => `<th>${esc(d)}</th>`).join('')}</tr></thead>
-    <tbody>${rows}</tbody>
-  </table>
   ${customFooterHtml}
 </body></html>`;
 }
 
-/* ---------- Free Periods HTML ---------- */
+/* ---------- Daywise Schedule HTML ---------- */
 
-function buildFreePeriodsHtml(
-  schoolName: string, teacherName: string,
-  timings: any, entries: any[], teachers: any[], classes: any[], sections: any[], subjects: any[],
-  teacherId: string,
+function buildDaywiseScheduleHtml(
+  schoolName: string,
+  selectedDays: string[],
+  combos: { value: string; label: string; classId: string; sectionId: string }[],
+  timings: any,
+  entries: any[],
+  teachers: any[],
+  classes: any[],
+  sections: any[],
+  subjects: any[],
+  showBreaks: boolean,
+  showEmpty: boolean,
   printSettings?: PrintSettings
 ): string {
   const s = printSettings || DEFAULT_PRINT_SETTINGS;
   const isLandscape = s.orientation === 'landscape';
-  const activeDays = timings.days;
-  const teacherEntries = entries.filter((e: any) => e.teacherId === teacherId);
   const genTime = new Date().toLocaleString('en-PK', { dateStyle: 'medium', timeStyle: 'short' });
-  const reportTitle = 'Free Periods Analysis';
+  const reportTitle = 'Daywise Schedule';
+  const daysLabel = selectedDays.length === timings.days.length
+    ? 'All Days'
+    : selectedDays.join(', ');
 
-  const freePeriods: { day: string; period: number; time: string }[] = [];
-  activeDays.forEach((day: string) => {
+  const getS = (id: string) => subjects.find((s: any) => s.id === id);
+  const getT = (id: string) => teachers.find((t: any) => t.id === id);
+
+  // Build HTML for each day
+  let dayBlocksHtml = '';
+  for (const day of selectedDays) {
+    let rows = '';
     for (let p = 1; p <= timings.periodsPerDay; p++) {
-      if (isBreakPeriod(p, timings)) continue;
-      if (!teacherEntries.some((e: any) => e.day === day && e.period === p)) {
-        freePeriods.push({ day, period: p, time: getPeriodTime(p, timings) });
+      const isBreak = isBreakPeriod(p, timings);
+      if (isBreak && !showBreaks) continue;
+      const time = getPeriodTime(p, timings);
+      const label = getPeriodLabel(p, timings);
+      const rowClass = isBreak ? ' class="brk"' : '';
+      rows += `<tr${rowClass}><td class="tp"><span class="pl">${esc(label)}</span><span class="tt-time">${esc(time)}</span></td>`;
+      for (const combo of combos) {
+        if (isBreak) { rows += '<td class="tb">&#9749; Break</td>'; continue; }
+        const entry = entries.find((e: any) => e.day === day && e.period === p && e.classId === combo.classId && e.sectionId === combo.sectionId);
+        if (entry) {
+          const subj = getS(entry.subjectId);
+          const tchr = getT(entry.teacherId);
+          rows += `<td class="tf"><b>${esc(subj?.shortName || '?')}</b><span class="tn">${esc(tchr?.name || '?')}</span></td>`;
+        } else if (showEmpty) {
+          rows += '<td class="te">\u2014</td>';
+        } else {
+          rows += '<td></td>';
+        }
       }
+      rows += '</tr>';
     }
-  });
 
-  const grouped = new Map<string, typeof freePeriods>();
-  freePeriods.forEach((fp) => { const list = grouped.get(fp.day) || []; list.push(fp); grouped.set(fp.day, list); });
-
-  const nonBreakCount = timings.periodTimingMode === 'custom'
-    ? timings.customPeriodTimings.filter((pt: any) => !pt.isBreak).length
-    : timings.periodsPerDay - (timings.breakAfterPeriod > 0 ? 1 : 0);
-  const totalTeaching = activeDays.length * nonBreakCount;
-  const pct = totalTeaching > 0 ? Math.round((freePeriods.length / totalTeaching) * 100) : 0;
-
-  let dayBlocks = '';
-  activeDays.forEach((day: string) => {
-    const dayFree = grouped.get(day);
-    if (!dayFree || dayFree.length === 0) return;
-    const items = dayFree.map((fp) => `<span class="fi">${getPeriodLabel(fp.period, timings)} (${esc(fp.time)})</span>`).join('');
-    dayBlocks += `<div class="db"><div class="dh">${esc(day)} <span class="fc">${dayFree.length} free</span></div><div class="di">${items}</div></div>`;
-  });
+    dayBlocksHtml += `
+    <div class="day-block">
+      <div class="db"><div class="dh">${esc(day)}</div></div>
+      <table class="tt">
+        <thead><tr><th>Period</th>${combos.map((c) => `<th>${esc(c.label)}</th>`).join('')}</tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  }
 
   const customHeaderHtml = s.headerContent
     ? `<div class="custom-header">${esc(s.headerContent)}</div>`
@@ -2193,14 +1828,18 @@ function buildFreePeriodsHtml(
   const customFooterHtml = s.footerContent
     ? `<div class="custom-footer">${esc(s.footerContent)}</div>`
     : '';
-  const bodyClass = s.sheetsPerPage > 1 ? ` class="sheets-nup-${s.sheetsPerPage}"` : '';
+  const bodyClass = s.sheetsPerPage > 1 ? ' class="sheets-multi"' : '';
 
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${buildTimetableCss(isLandscape, s.sheetsPerPage)}</style></head>
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${buildTimetableCss(isLandscape, s.sheetsPerPage)}
+  .day-block { margin-bottom: 16px; page-break-inside: avoid; break-inside: avoid; }
+  .day-block .db { margin-bottom: 0; }
+  .day-block table.tt { margin-top: 0; }
+</style></head>
 <body${bodyClass}>
   <div class="page-header">
     <div class="school-name">${esc(schoolName)}</div>
     <div class="report-title">${esc(reportTitle)}</div>
-    <div class="report-sub">${esc(teacherName)}</div>
+    <div class="report-sub">${esc(daysLabel)} | ${combos.length} class${combos.length !== 1 ? 'es' : ''}</div>
     ${customHeaderHtml}
   </div>
   <div class="page-footer">
@@ -2208,12 +1847,7 @@ function buildFreePeriodsHtml(
     <span class="f-center">${esc(schoolName)} &mdash; ${esc(reportTitle)}</span>
     <span class="f-right">Page: 1 of 1</span>
   </div>
-  <div class="sr">
-    <div class="si"><span class="sn2">${freePeriods.length}</span><span class="sl">Free Periods</span></div>
-    <div class="si"><span class="sn2">${totalTeaching}</span><span class="sl">Total Periods</span></div>
-    <div class="si"><span class="sn2">${pct}%</span><span class="sl">Free Rate</span></div>
-  </div>
-  ${dayBlocks}
+  ${dayBlocksHtml}
   ${customFooterHtml}
 </body></html>`;
 }
