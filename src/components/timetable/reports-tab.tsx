@@ -264,48 +264,49 @@ export function ReportsTab() {
   );
 }
 
-/* ===== Print Helper — opens a new window with print-ready HTML ===== */
+/* ===== Print/PDF Helper — iframe-based, works on Android WebView ===== */
 
-function printHtml(htmlContent: string, title: string) {
-  const win = window.open('', '_blank');
-  if (!win) return;
-  win.document.write(htmlContent);
-  win.document.title = title;
-  win.document.close();
+function printOrSave(htmlContent: string, title: string) {
+  // Remove any existing print iframe
+  const existing = document.getElementById('__print_iframe__');
+  if (existing) existing.remove();
+
+  const iframe = document.createElement('iframe');
+  iframe.id = '__print_iframe__';
+  iframe.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;border:none;z-index:99999;background:white;';
+  document.body.appendChild(iframe);
+
+  const doc = iframe.contentDocument || iframe.contentWindow?.document;
+  if (!doc) return;
+  doc.open();
+  doc.write(htmlContent);
+  doc.title = title;
+  doc.close();
+
   setTimeout(() => {
-    win.print();
-  }, 400);
+    try {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+    } catch (e) {
+      console.error('Print failed:', e);
+    }
+    // Remove iframe after print dialog closes
+    setTimeout(() => iframe.remove(), 2000);
+  }, 500);
 }
-
-/* ===== PDF Download Helper ===== */
 
 function usePdfDownload() {
   const { toast } = useToast();
   const [isGenerating, setIsGenerating] = useState(false);
 
-  const downloadPdf = async (htmlContent: string, filename: string, orientation: 'portrait' | 'landscape' = 'portrait') => {
+  const downloadPdf = async (htmlContent: string, filename: string, _orientation: 'portrait' | 'landscape' = 'portrait') => {
     setIsGenerating(true);
     try {
-      const html2pdf = (await import('html2pdf.js')).default;
-      const container = document.createElement('div');
-      container.innerHTML = htmlContent;
-      document.body.appendChild(container);
-
-      const opt = {
-        margin: [10, 8, 14, 8],
-        filename: filename,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, letterRendering: true, logging: false },
-        jsPDF: { unit: 'mm', format: 'a4', orientation },
-        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
-      };
-
-      await html2pdf().set(opt).from(container).save();
-      document.body.removeChild(container);
-      toast({ title: 'PDF downloaded', description: `${filename} has been saved.` });
+      printOrSave(htmlContent, filename.replace('.pdf', ''));
+      toast({ title: 'Print dialog opened', description: 'Choose "Save as PDF" to download.' });
     } catch (err) {
-      console.error('PDF generation failed:', err);
-      toast({ title: 'PDF generation failed', description: 'An error occurred while generating the PDF.', variant: 'destructive' });
+      console.error('PDF failed:', err);
+      toast({ title: 'PDF generation failed', description: 'An error occurred.', variant: 'destructive' });
     } finally {
       setIsGenerating(false);
     }
@@ -496,84 +497,59 @@ function TeacherPeriodCountReport() {
       ? 'All Days'
       : filteredSelectedDays.join(', ');
 
-    return `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<style>
-  @page {
-    size: A4 ${isLandscape ? 'landscape' : 'portrait'};
-    margin: ${isLandscape ? '8mm 6mm 12mm 6mm' : '12mm 10mm 16mm 10mm'};
-  }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; font-size: ${fontSize}; line-height: 1.3; color: #1D1D1F; }
-
-  .report-header { text-align: center; padding-bottom: 6px; margin-bottom: 8px; border-bottom: 2px solid #007AFF; }
-  .school-name { font-size: ${isLandscape ? '16px' : '14px'}; font-weight: 700; color: #1D1D1F; }
-  .report-title { font-size: ${isLandscape ? '12px' : '11px'}; font-weight: 600; color: #333; margin-top: 2px; }
-  .report-subtitle { font-size: ${headerFontSize}; color: #666; margin-top: 1px; }
-
-  .pc-table { width: 100%; border-collapse: collapse; font-size: ${fontSize}; table-layout: fixed; }
-  .pc-table th, .pc-table td { border: 1px solid #D1D1D6; padding: ${cellPad}; text-align: center; vertical-align: middle; }
-  .th-sno { width: 22px; background: #F5F5F7; font-size: ${headerFontSize}; font-weight: 600; }
-  .th-name { background: #F5F5F7; font-size: ${headerFontSize}; font-weight: 600; text-align: left !important; width: auto; }
-  .th-short { background: #F5F5F7; font-size: ${headerFontSize}; font-weight: 600; width: 40px; }
-  .th-day { background: #F5F5F7; font-size: ${headerFontSize}; font-weight: 600; }
-  .th-total { background: #007AFF; color: white; font-size: ${headerFontSize}; font-weight: 700; width: 36px; }
-  .th-detail { background: #F5F5F7; font-size: ${headerFontSize}; font-weight: 600; text-align: left !important; }
-
-  .td-sno { font-size: ${headerFontSize}; color: #86868B; }
-  .td-name { text-align: left !important; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .td-short { font-weight: 600; font-size: ${fontSize}; }
-  .td-num { font-weight: 600; font-size: ${fontSize}; }
-  .td-num.zero { background: #FFF3E0; color: #E65100; }
-  .td-num.full { background: #E8F5E9; color: #2E7D32; }
-  .td-total { background: #F0F5FF; font-size: ${fontSize}; }
-  .td-detail { text-align: left !important; font-size: ${headerFontSize}; color: #555; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: ${isLandscape ? '120px' : '80px'}; }
-
-  .table-chunk { padding: 0 4px; }
-  .chunk-title { font-size: ${headerFontSize}; font-weight: 600; text-align: center; margin-bottom: 3px; color: #333; }
-
-  .summary-bar { display: flex; gap: 16px; justify-content: center; margin-top: 8px; flex-wrap: wrap; }
-  .summary-item { text-align: center; padding: 4px 12px; background: #F5F5F7; border-radius: 6px; border: 1px solid #E5E5EA; }
-  .summary-num { display: block; font-size: 14px; font-weight: 700; color: #007AFF; }
-  .summary-label { display: block; font-size: ${headerFontSize}; color: #86868B; }
-
-  .report-footer { margin-top: 10px; padding-top: 6px; border-top: 1px solid #E5E5EA; display: flex; justify-content: space-between; font-size: ${headerFontSize}; color: #86868B; }
-
-  @media print {
-    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  }
-</style>
-</head>
-<body>
-  <div class="report-header">
-    <div class="school-name">${esc(schoolName)}</div>
-    <div class="report-title">Teacher Period Count Report</div>
-    <div class="report-subtitle">${esc(daysLabel)} | Max ${maxPossiblePerTeacher} periods/teacher | ${teachers.length} teachers</div>
+    const genTime = new Date().toLocaleString('en-PK', { dateStyle: 'medium', timeStyle: 'short' });
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+@page { size: A4 ${isLandscape ? 'landscape' : 'portrait'}; margin: 14mm 10mm 14mm 10mm; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: Arial, 'Helvetica Neue', sans-serif; font-size: ${fontSize}; color: #1a1a2e; }
+.rpt-header { text-align: center; padding-bottom: 7px; margin-bottom: 9px; border-bottom: 3px solid #1565C0; }
+.rpt-school { font-size: ${isLandscape ? '15pt' : '13pt'}; font-weight: 700; color: #0D47A1; }
+.rpt-title  { font-size: ${isLandscape ? '11pt' : '10pt'}; font-weight: 600; color: #1a1a2e; margin-top: 2px; }
+.rpt-sub    { font-size: ${headerFontSize}; color: #555; margin-top: 1px; }
+.pc-table { width: 100%; border-collapse: collapse; font-size: ${fontSize}; table-layout: fixed; }
+.pc-table th, .pc-table td { border: 1px solid #CFD8DC; padding: ${cellPad}; text-align: center; vertical-align: middle; }
+.pc-table thead th { background: #1565C0; color: #fff; font-size: ${headerFontSize}; font-weight: 700; }
+.pc-table thead .th-name { text-align: left; }
+.td-sno  { color: #78909C; font-size: ${headerFontSize}; width: 22px; }
+.td-name { text-align: left !important; font-weight: 500; }
+.td-short { font-weight: 600; }
+.td-num  { font-weight: 600; }
+.td-zero { background: #FFF3E0 !important; color: #E65100; }
+.td-full { background: #E8F5E9 !important; color: #2E7D32; }
+.td-total { background: #E3F2FD; font-weight: 700; color: #1565C0; }
+.td-detail { text-align: left !important; font-size: ${headerFontSize}; color: #555; }
+.table-chunk { padding: 0 3px; }
+.chunk-title { font-size: ${headerFontSize}; font-weight: 700; text-align: center; margin-bottom: 3px; color: #1565C0; border-bottom: 1px solid #90CAF9; padding-bottom: 2px; }
+.pc-summary { display: flex; gap: 10px; justify-content: center; margin-top: 10px; flex-wrap: wrap; }
+.pc-sum-item { text-align: center; padding: 5px 14px; background: #E3F2FD; border-radius: 6px; border: 1px solid #90CAF9; }
+.pc-sum-num { display: block; font-size: 14pt; font-weight: 700; color: #1565C0; }
+.pc-sum-lbl { display: block; font-size: ${headerFontSize}; color: #78909C; }
+.rpt-footer { margin-top: 10px; padding-top: 5px; border-top: 1px solid #B0BEC5; display: flex; justify-content: space-between; font-size: ${headerFontSize}; color: #78909C; }
+@media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+</style></head><body>
+  <div class="rpt-header">
+    <div class="rpt-school">${esc(schoolName)}</div>
+    <div class="rpt-title">Teacher Period Count Report</div>
+    <div class="rpt-sub">${esc(daysLabel)} | Max ${maxPossiblePerTeacher} periods/teacher | ${teachers.length} teachers</div>
   </div>
-
   ${tablesHtml}
-
-  <div class="summary-bar">
-    <div class="summary-item"><span class="summary-num">${teachers.length}</span><span class="summary-label">Teachers</span></div>
-    <div class="summary-item"><span class="summary-num">${filteredSelectedDays.length}</span><span class="summary-label">Days</span></div>
-    <div class="summary-item"><span class="summary-num">${maxPossiblePerTeacher}</span><span class="summary-label">Max Periods</span></div>
-    <div class="summary-item"><span class="summary-num">${sorted.reduce((s, t) => s + t.totalForSelectedDays, 0)}</span><span class="summary-label">Total Assigned</span></div>
+  <div class="pc-summary">
+    <div class="pc-sum-item"><span class="pc-sum-num">${teachers.length}</span><span class="pc-sum-lbl">Teachers</span></div>
+    <div class="pc-sum-item"><span class="pc-sum-num">${filteredSelectedDays.length}</span><span class="pc-sum-lbl">Days</span></div>
+    <div class="pc-sum-item"><span class="pc-sum-num">${maxPossiblePerTeacher}</span><span class="pc-sum-lbl">Max Periods</span></div>
+    <div class="pc-sum-item"><span class="pc-sum-num">${sorted.reduce((s: number, t: any) => s + t.totalForSelectedDays, 0)}</span><span class="pc-sum-lbl">Total Assigned</span></div>
   </div>
-
-  <div class="report-footer">
-    <span>${esc(today)}</span>
-    <span>Generated by Timetable Manager</span>
-    <span>Page <span class="page-num"></span></span>
+  <div class="rpt-footer">
+    <span>${esc(genTime)}</span>
+    <span>${esc(schoolName)} \u2014 Teacher Period Count Report</span>
+    <span>Page: 1 of 1</span>
   </div>
-</body>
-</html>`;
-  }, [teacherData, filteredSelectedDays, activeDays, orientation, tablesPerPage, detailMode, schoolName, nonBreakPeriodsCount, maxPossiblePerTeacher, teachers.length]);
+</body></html>`;
+  }, [teacherData, filteredSelectedDays  }, [teacherData, filteredSelectedDays, activeDays, orientation, tablesPerPage, detailMode, schoolName, nonBreakPeriodsCount, maxPossiblePerTeacher, teachers.length]);
 
   const handlePrint = () => {
     const html = buildReportHtml();
-    printHtml(html, 'Teacher_Period_Count');
+    printOrSave(html, 'Teacher_Period_Count');
     toast({ title: 'Print dialog opened', description: 'Use the print dialog to print or save as PDF.' });
   };
 
@@ -1251,166 +1227,44 @@ function CutoutTimetablesReport() {
 
     const totalPages = pages.length;
 
-    return `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<style>
-  @page {
-    size: A4 portrait;
-    margin: 8mm;
-  }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; font-size: ${fontSize}; line-height: 1.2; color: #1D1D1F; }
-
-  .ct-page {
-    display: grid;
-    grid-template-columns: ${gridCols};
-    gap: ${boxGap};
-    width: 100%;
-    min-height: 270mm;
-    align-content: start;
-  }
-
-  .ct-box {
-    border: 2px dashed #999;
-    border-radius: 10px;
-    padding: ${boxPadding};
-    page-break-inside: avoid;
-    break-inside: avoid;
-    background: #FAFAFA;
-  }
-
-  .ct-name {
-    text-align: center;
-    font-size: ${nameFontSize};
-    font-weight: 800;
-    color: #FF0000;
-    margin-bottom: 4px;
-    padding-bottom: 3px;
-    border-bottom: 1.5px solid #FF000040;
-    letter-spacing: 0.3px;
-  }
-
-  .ct-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: ${fontSize};
-    table-layout: fixed;
-  }
-
-  .ct-table th, .ct-table td {
-    border: 1px solid #CCC;
-    padding: ${cellPad};
-    text-align: center;
-    vertical-align: middle;
-  }
-
-  .ct-corner {
-    width: 28px;
-    background: #F0F0F0;
-    font-size: ${headerFontSize};
-    font-weight: 600;
-  }
-
-  .ct-day {
-    background: #E8E8ED;
-    font-size: ${headerFontSize};
-    font-weight: 700;
-    color: #333;
-  }
-
-  .ct-period {
-    background: #F5F5F7;
-    font-size: ${headerFontSize};
-    font-weight: 600;
-    text-align: center;
-    white-space: nowrap;
-  }
-
-  .ct-time {
-    font-size: ${tablesPerSheet <= 2 ? '5px' : '4px'};
-    color: #888;
-    font-weight: 400;
-  }
-
-  .ct-break {
-    background: #FFF8E1 !important;
-    font-size: ${headerFontSize};
-    color: #F57F17;
-    text-align: center;
-  }
-
-  .ct-cell {
-    font-size: ${fontSize};
-    height: ${tablesPerSheet <= 2 ? '22px' : tablesPerSheet <= 4 ? '16px' : '12px'};
-  }
-
-  .ct-filled {
-    background: #FFFFFF;
-  }
-
-  .ct-empty {
-    background: #F9F9F9;
-    color: #CCC;
-  }
-
-  .page-break {
-    page-break-after: always;
-    break-after: page;
-  }
-
-  .report-header {
-    text-align: center;
-    padding-bottom: 4px;
-    margin-bottom: 6px;
-    border-bottom: 2px solid #007AFF;
-  }
-
-  .school-name {
-    font-size: 12px;
-    font-weight: 700;
-    color: #1D1D1F;
-  }
-
-  .report-title {
-    font-size: 9px;
-    font-weight: 600;
-    color: #555;
-    margin-top: 1px;
-  }
-
-  .report-footer {
-    margin-top: 6px;
-    padding-top: 4px;
-    border-top: 1px solid #DDD;
-    display: flex;
-    justify-content: space-between;
-    font-size: 7px;
-    color: #999;
-  }
-
-  @media print {
-    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .ct-box { border-color: #666; }
-  }
-</style>
-</head>
-<body>
-  <div class="report-header">
-    <div class="school-name">${esc(schoolName)}</div>
-    <div class="report-title">Individual Teacher Timetables — Ready to Cut</div>
+    const genTime = new Date().toLocaleString('en-PK', { dateStyle: 'medium', timeStyle: 'short' });
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+@page { size: A4 portrait; margin: 8mm; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: Arial, 'Helvetica Neue', sans-serif; font-size: ${fontSize}; color: #1a1a2e; line-height: 1.2; }
+.rpt-header { text-align: center; padding-bottom: 5px; margin-bottom: 7px; border-bottom: 3px solid #1565C0; }
+.rpt-school { font-size: 12pt; font-weight: 700; color: #0D47A1; }
+.rpt-title  { font-size: 9pt; font-weight: 600; color: #1a1a2e; margin-top: 2px; }
+.ct-page { display: grid; grid-template-columns: ${gridCols}; gap: ${boxGap}; width: 100%; align-content: start; }
+.ct-box { border: 2px solid #1565C0; border-radius: 8px; padding: ${boxPadding}; page-break-inside: avoid; break-inside: avoid; background: #FAFAFE; }
+.ct-name { text-align: center; font-size: ${nameFontSize}; font-weight: 800; color: #0D47A1; margin-bottom: 4px; padding-bottom: 3px; border-bottom: 1.5px solid #90CAF9; }
+.ct-table { width: 100%; border-collapse: collapse; font-size: ${fontSize}; table-layout: fixed; }
+.ct-table th, .ct-table td { border: 1px solid #CFD8DC; padding: ${cellPad}; text-align: center; vertical-align: middle; }
+.ct-corner { width: 28px; background: #E3F2FD; font-size: ${headerFontSize}; font-weight: 700; }
+.ct-day { background: #1565C0; color: #fff; font-size: ${headerFontSize}; font-weight: 700; }
+.ct-period { background: #E3F2FD; font-size: ${headerFontSize}; font-weight: 700; color: #0D47A1; white-space: nowrap; }
+.ct-time { font-size: ${tablesPerSheet <= 2 ? '5px' : '4px'}; color: #78909C; font-weight: 400; }
+.ct-break { background: #FFF8E1 !important; font-size: ${headerFontSize}; color: #F57F17; font-style: italic; }
+.ct-cell { font-size: ${fontSize}; height: ${tablesPerSheet <= 2 ? '22px' : tablesPerSheet <= 4 ? '16px' : '12px'}; }
+.ct-filled { background: #F8F9FF; }
+.ct-filled strong { color: #1a237e; }
+.ct-empty { background: #FAFAFA; color: #CFD8DC; }
+.page-break { page-break-after: always; break-after: page; }
+.rpt-footer { margin-top: 6px; padding-top: 4px; border-top: 1px solid #B0BEC5; display: flex; justify-content: space-between; font-size: 7pt; color: #78909C; }
+@media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } .ct-box { border-color: #1565C0; } }
+</style></head><body>
+  <div class="rpt-header">
+    <div class="rpt-school">${esc(schoolName)}</div>
+    <div class="rpt-title">Individual Teacher Timetables</div>
   </div>
-
   ${allPagesHtml}
-
-  <div class="report-footer">
-    <span>${esc(today)}</span>
+  <div class="rpt-footer">
+    <span>${esc(genTime)}</span>
     <span>${teacherSchedules.length} teachers | ${tablesPerSheet} per sheet | ${totalPages} pages</span>
+    <span>Page: 1 of ${totalPages}</span>
   </div>
-</body>
-</html>`;
-  }, [teacherSchedules, tablesPerSheet, activeDays, visiblePeriods, schoolName, timings]);
+</body></html>`;
+  }, [teacherSchedules, tablesPerSheet  }, [teacherSchedules, tablesPerSheet, activeDays, visiblePeriods, schoolName, timings]);
 
   const handlePrint = () => {
     if (selectedTeacherIds.length === 0) {
@@ -1418,7 +1272,7 @@ function CutoutTimetablesReport() {
       return;
     }
     const html = buildCutoutHtml();
-    printHtml(html, 'Cutout_Teacher_Timetables');
+    printOrSave(html, 'Cutout_Teacher_Timetables');
     toast({ title: 'Print dialog opened', description: `${selectedTeacherIds.length} teacher(s) scheduled for print.` });
   };
 
@@ -1642,164 +1496,454 @@ function esc(str: string): string {
 
 function buildClassTimetableHtml(schoolName: string, className: string, sectionName: string, timings: any, entries: any[], teachers: any[], classes: any[], sections: any[], subjects: any[], classId: string, sectionId: string, showBreaks: boolean, showEmpty: boolean): string {
   const activeDays = timings.days;
-  let filteredEntries = entries.filter((e: any) => e.classId === classId && e.sectionId === sectionId);
-  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-
+  const fe = entries.filter((e: any) => e.classId === classId && e.sectionId === sectionId);
+  const genTime = new Date().toLocaleString('en-PK', { dateStyle: 'medium', timeStyle: 'short' });
+  const reportTitle = 'Class Timetable';
+  const subtitle = `${className} \u2014 Section ${sectionName}`;
   const getT = (id: string) => teachers.find((t: any) => t.id === id);
   const getS = (id: string) => subjects.find((s: any) => s.id === id);
-
   let rows = '';
   for (let p = 1; p <= timings.periodsPerDay; p++) {
     const isBreak = isBreakPeriod(p, timings);
     if (isBreak && !showBreaks) continue;
     const time = getPeriodTime(p, timings);
     const label = getPeriodLabel(p, timings);
-    const rowClass = isBreak ? ' style="background:#FFF8E1"' : '';
-
-    rows += `<tr${rowClass}><td class="tp">${esc(label)}<br><span class="tt">${esc(time)}</span></td>`;
+    if (isBreak) {
+      rows += `<tr class="tt-break"><td class="tt-period"><span class="pl">${esc(label)}</span><span class="pt">${esc(time)}</span></td>${activeDays.map(() => '<td class="tt-break-cell">\u2615 Break</td>').join('')}</tr>`;
+      continue;
+    }
+    rows += `<tr><td class="tt-period"><span class="pl">${esc(label)}</span><span class="pt">${esc(time)}</span></td>`;
     for (const day of activeDays) {
-      if (isBreak) { rows += '<td class="tb">&#9749;</td>'; continue; }
-      const entry = filteredEntries.find((e: any) => e.day === day && e.period === p);
+      const entry = fe.find((e: any) => e.day === day && e.period === p);
       if (entry) {
         const subj = getS(entry.subjectId);
         const tchr = getT(entry.teacherId);
-        rows += `<td class="tf"><b>${esc(subj?.shortName || '?')}</b><br><span class="tn">${esc(tchr?.name || '?')}</span></td>`;
+        rows += `<td class="tt-filled"><b>${esc(subj?.shortName || '?')}</b><span class="tn">${esc(tchr?.name || '?')}</span></td>`;
       } else if (showEmpty) {
-        rows += '<td class="te">—</td>';
+        rows += '<td class="tt-empty">\u2014</td>';
       } else {
         rows += '<td></td>';
       }
     }
     rows += '</tr>';
   }
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${'
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: Arial, 'Helvetica Neue', sans-serif; font-size: 9pt; color: #1a1a2e; background: #fff; }
 
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-@page{size:A4 portrait;margin:12mm 10mm 16mm 10mm}
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:9px;color:#1D1D1F}
-.rh{text-align:center;padding-bottom:8px;margin-bottom:8px;border-bottom:2px solid #007AFF}
-.sn{font-size:16px;font-weight:700}.rt{font-size:12px;font-weight:600;color:#333;margin-top:2px}.rs{font-size:10px;color:#666;margin-top:1px}
-table{width:100%;border-collapse:collapse}th,td{border:1px solid #D1D1D6;padding:3px;text-align:center;vertical-align:middle}
-th{background:#F5F5F7;font-size:8px;font-weight:600}
-.tp{background:#FAFAFA;font-size:8px;width:65px}.tt{font-size:6.5px;color:#86868B}
-.tf{font-size:9px}.tn{font-size:7px;color:#555}.tb{font-size:10px;color:#FF9500}.te{color:#C7C7CC}
-.rf{margin-top:10px;padding-top:6px;border-top:1px solid #E5E5EA;display:flex;justify-content:space-between;font-size:7px;color:#86868B}
-@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
-</style></head><body>
-<div class="rh"><div class="sn">${esc(schoolName)}</div><div class="rt">Class Timetable</div><div class="rs">${esc(className)} — Section ${esc(sectionName)}</div></div>
-<table><thead><tr><th>Day / Period</th>${activeDays.map((d: string) => `<th>${esc(d)}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>
-<div class="rf"><span>${esc(today)}</span><span>Generated by Timetable Manager</span></div>
+/* ── Page setup ── */
+@page { size: A4 portrait; margin: 14mm 12mm 14mm 12mm; }
+@page { @bottom-left   { content: attr(data-gen-time); font-family: Arial; font-size: 7pt; color: #888; } }
+@page { @bottom-center { content: attr(data-footer-mid); font-family: Arial; font-size: 7pt; color: #888; } }
+@page { @bottom-right  { content: "Page " counter(page) " of " counter(pages); font-family: Arial; font-size: 7pt; color: #888; } }
+
+/* ── Header block ── */
+.rpt-header { text-align: center; padding-bottom: 8px; margin-bottom: 10px; border-bottom: 3px solid #1565C0; }
+.rpt-school { font-size: 15pt; font-weight: 700; color: #0D47A1; letter-spacing: 0.5px; }
+.rpt-title  { font-size: 11pt; font-weight: 600; color: #1a1a2e; margin-top: 3px; }
+.rpt-sub    { font-size: 9pt;  color: #555; margin-top: 2px; }
+
+/* ── Footer bar ── */
+.rpt-footer {
+  margin-top: 12px; padding-top: 6px;
+  border-top: 1px solid #B0BEC5;
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 7pt; color: #78909C;
+}
+.rpt-footer .fl { text-align: left; }
+.rpt-footer .fc { text-align: center; flex: 1; }
+.rpt-footer .fr { text-align: right; }
+
+/* ── Timetable grid ── */
+.tt-table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+.tt-table th, .tt-table td { border: 1px solid #CFD8DC; padding: 3pt 2pt; text-align: center; vertical-align: middle; }
+.tt-table thead th { background: #1565C0; color: #fff; font-size: 8pt; font-weight: 700; }
+.tt-table thead th:first-child { background: #0D47A1; }
+.tt-period { background: #E3F2FD; font-size: 7.5pt; width: 70px; min-width: 70px; }
+.tt-period .pl { display: block; font-weight: 700; color: #0D47A1; }
+.tt-period .pt { display: block; font-size: 6pt; color: #78909C; margin-top: 1px; }
+.tt-filled { font-size: 8pt; }
+.tt-filled b { display: block; color: #1a237e; }
+.tt-filled .tn { display: block; font-size: 6.5pt; color: #455A64; margin-top: 1px; }
+.tt-empty { color: #CFD8DC; font-size: 10pt; }
+.tt-break td { background: #FFF8E1 !important; }
+.tt-break-cell { font-style: italic; color: #F57F17; font-size: 8pt; }
+
+/* ── Free periods ── */
+.fp-stats { display: flex; gap: 10px; justify-content: center; margin-bottom: 12px; }
+.fp-stat { text-align: center; padding: 7px 16px; background: #E3F2FD; border-radius: 8px; border: 1px solid #90CAF9; }
+.fp-stat-num { display: block; font-size: 18pt; font-weight: 700; color: #1565C0; }
+.fp-stat-lbl { display: block; font-size: 7pt; color: #78909C; margin-top: 2px; }
+.fp-day { margin-bottom: 8px; border: 1px solid #CFD8DC; border-radius: 6px; overflow: hidden; }
+.fp-day-hd { background: #1565C0; color: #fff; padding: 5px 8px; font-weight: 700; font-size: 9pt; }
+.fp-day-hd .fc { font-weight: 400; font-size: 7.5pt; color: #BBDEFB; margin-left: 6px; }
+.fp-day-bd { display: flex; flex-wrap: wrap; gap: 5px; padding: 7px 8px; }
+.fp-chip { padding: 3px 9px; background: #E8F5E9; border: 1px solid #A5D6A7; border-radius: 12px; font-size: 7.5pt; font-weight: 600; color: #2E7D32; }
+.fp-chip span { font-weight: 400; color: #555; font-size: 6.5pt; margin-left: 3px; }
+
+/* ── Period count table ── */
+.pc-table { width: 100%; border-collapse: collapse; }
+.pc-table th, .pc-table td { border: 1px solid #CFD8DC; padding: 3pt 2pt; text-align: center; vertical-align: middle; }
+.pc-table thead tr th { background: #1565C0; color: #fff; font-size: 7.5pt; font-weight: 700; }
+.pc-table thead tr th.th-name { text-align: left; }
+.td-sno { color: #78909C; font-size: 7pt; width: 22px; }
+.td-name { text-align: left !important; font-weight: 500; }
+.td-short { font-weight: 600; }
+.td-num { font-weight: 600; }
+.td-zero { background: #FFF3E0 !important; color: #E65100; }
+.td-full { background: #E8F5E9 !important; color: #2E7D32; }
+.td-total { background: #E3F2FD; font-weight: 700; color: #1565C0; }
+.td-detail { text-align: left !important; font-size: 6.5pt; color: #555; }
+.pc-summary { display: flex; gap: 10px; justify-content: center; margin-top: 10px; flex-wrap: wrap; }
+.pc-sum-item { text-align: center; padding: 5px 14px; background: #E3F2FD; border-radius: 6px; border: 1px solid #90CAF9; }
+.pc-sum-num { display: block; font-size: 14pt; font-weight: 700; color: #1565C0; }
+.pc-sum-lbl { display: block; font-size: 6.5pt; color: #78909C; }
+
+@media print {
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+'}</style></head><body>
+  <div class="rpt-header">
+    <div class="rpt-school">${esc(schoolName)}</div>
+    <div class="rpt-title">${esc(reportTitle)}</div>
+    <div class="rpt-sub">${esc(subtitle)}</div>
+  </div>
+  <table class="tt-table">
+    <thead><tr><th>Period / Day</th>${activeDays.map((d: string) => `<th>${esc(d)}</th>`).join('')}</tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <div class="rpt-footer">
+    <span class="fl">${esc(genTime)}</span>
+    <span class="fc">${esc(schoolName)} \u2014 ${esc(reportTitle)}</span>
+    <span class="fr">Page: 1 of 1</span>
+  </div>
 </body></html>`;
 }
 
 function buildTeacherScheduleHtml(schoolName: string, teacherName: string, timings: any, entries: any[], teachers: any[], classes: any[], sections: any[], subjects: any[], teacherId: string, showBreaks: boolean, showEmpty: boolean): string {
   const activeDays = timings.days;
-  let filteredEntries = entries.filter((e: any) => e.teacherId === teacherId);
-  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-
+  const fe = entries.filter((e: any) => e.teacherId === teacherId);
+  const genTime = new Date().toLocaleString('en-PK', { dateStyle: 'medium', timeStyle: 'short' });
+  const reportTitle = 'Teacher Schedule';
   const getS = (id: string) => subjects.find((s: any) => s.id === id);
   const getC = (id: string) => classes.find((c: any) => c.id === id);
   const getSec = (id: string) => sections.find((s: any) => s.id === id);
-
   let rows = '';
   for (let p = 1; p <= timings.periodsPerDay; p++) {
     const isBreak = isBreakPeriod(p, timings);
     if (isBreak && !showBreaks) continue;
     const time = getPeriodTime(p, timings);
     const label = getPeriodLabel(p, timings);
-    const rowClass = isBreak ? ' style="background:#FFF8E1"' : '';
-
-    rows += `<tr${rowClass}><td class="tp">${esc(label)}<br><span class="tt">${esc(time)}</span></td>`;
+    if (isBreak) {
+      rows += `<tr class="tt-break"><td class="tt-period"><span class="pl">${esc(label)}</span><span class="pt">${esc(time)}</span></td>${activeDays.map(() => '<td class="tt-break-cell">\u2615 Break</td>').join('')}</tr>`;
+      continue;
+    }
+    rows += `<tr><td class="tt-period"><span class="pl">${esc(label)}</span><span class="pt">${esc(time)}</span></td>`;
     for (const day of activeDays) {
-      if (isBreak) { rows += '<td class="tb">&#9749;</td>'; continue; }
-      const entry = filteredEntries.find((e: any) => e.day === day && e.period === p);
+      const entry = fe.find((e: any) => e.day === day && e.period === p);
       if (entry) {
         const subj = getS(entry.subjectId);
         const cls = getC(entry.classId);
         const sec = getSec(entry.sectionId);
-        rows += `<td class="tf"><b>${esc(subj?.shortName || '?')}</b><br><span class="tn">${esc(cls?.name || '')}-${esc(sec?.name || '')}</span></td>`;
+        rows += `<td class="tt-filled"><b>${esc(subj?.shortName || '?')}</b><span class="tn">${esc(cls?.name || '')}-${esc(sec?.name || '')}</span></td>`;
       } else if (showEmpty) {
-        rows += '<td class="te">—</td>';
+        rows += '<td class="tt-empty">\u2014</td>';
       } else {
         rows += '<td></td>';
       }
     }
     rows += '</tr>';
   }
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${'
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: Arial, 'Helvetica Neue', sans-serif; font-size: 9pt; color: #1a1a2e; background: #fff; }
 
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-@page{size:A4 portrait;margin:12mm 10mm 16mm 10mm}
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:9px;color:#1D1D1F}
-.rh{text-align:center;padding-bottom:8px;margin-bottom:8px;border-bottom:2px solid #007AFF}
-.sn{font-size:16px;font-weight:700}.rt{font-size:12px;font-weight:600;color:#333;margin-top:2px}.rs{font-size:10px;color:#666;margin-top:1px}
-table{width:100%;border-collapse:collapse}th,td{border:1px solid #D1D1D6;padding:3px;text-align:center;vertical-align:middle}
-th{background:#F5F5F7;font-size:8px;font-weight:600}
-.tp{background:#FAFAFA;font-size:8px;width:65px}.tt{font-size:6.5px;color:#86868B}
-.tf{font-size:9px}.tn{font-size:7px;color:#555}.tb{font-size:10px;color:#FF9500}.te{color:#C7C7CC}
-.rf{margin-top:10px;padding-top:6px;border-top:1px solid #E5E5EA;display:flex;justify-content:space-between;font-size:7px;color:#86868B}
-@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
-</style></head><body>
-<div class="rh"><div class="sn">${esc(schoolName)}</div><div class="rt">Teacher Schedule</div><div class="rs">${esc(teacherName)}</div></div>
-<table><thead><tr><th>Day / Period</th>${activeDays.map((d: string) => `<th>${esc(d)}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>
-<div class="rf"><span>${esc(today)}</span><span>Generated by Timetable Manager</span></div>
+/* ── Page setup ── */
+@page { size: A4 portrait; margin: 14mm 12mm 14mm 12mm; }
+@page { @bottom-left   { content: attr(data-gen-time); font-family: Arial; font-size: 7pt; color: #888; } }
+@page { @bottom-center { content: attr(data-footer-mid); font-family: Arial; font-size: 7pt; color: #888; } }
+@page { @bottom-right  { content: "Page " counter(page) " of " counter(pages); font-family: Arial; font-size: 7pt; color: #888; } }
+
+/* ── Header block ── */
+.rpt-header { text-align: center; padding-bottom: 8px; margin-bottom: 10px; border-bottom: 3px solid #1565C0; }
+.rpt-school { font-size: 15pt; font-weight: 700; color: #0D47A1; letter-spacing: 0.5px; }
+.rpt-title  { font-size: 11pt; font-weight: 600; color: #1a1a2e; margin-top: 3px; }
+.rpt-sub    { font-size: 9pt;  color: #555; margin-top: 2px; }
+
+/* ── Footer bar ── */
+.rpt-footer {
+  margin-top: 12px; padding-top: 6px;
+  border-top: 1px solid #B0BEC5;
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 7pt; color: #78909C;
+}
+.rpt-footer .fl { text-align: left; }
+.rpt-footer .fc { text-align: center; flex: 1; }
+.rpt-footer .fr { text-align: right; }
+
+/* ── Timetable grid ── */
+.tt-table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+.tt-table th, .tt-table td { border: 1px solid #CFD8DC; padding: 3pt 2pt; text-align: center; vertical-align: middle; }
+.tt-table thead th { background: #1565C0; color: #fff; font-size: 8pt; font-weight: 700; }
+.tt-table thead th:first-child { background: #0D47A1; }
+.tt-period { background: #E3F2FD; font-size: 7.5pt; width: 70px; min-width: 70px; }
+.tt-period .pl { display: block; font-weight: 700; color: #0D47A1; }
+.tt-period .pt { display: block; font-size: 6pt; color: #78909C; margin-top: 1px; }
+.tt-filled { font-size: 8pt; }
+.tt-filled b { display: block; color: #1a237e; }
+.tt-filled .tn { display: block; font-size: 6.5pt; color: #455A64; margin-top: 1px; }
+.tt-empty { color: #CFD8DC; font-size: 10pt; }
+.tt-break td { background: #FFF8E1 !important; }
+.tt-break-cell { font-style: italic; color: #F57F17; font-size: 8pt; }
+
+/* ── Free periods ── */
+.fp-stats { display: flex; gap: 10px; justify-content: center; margin-bottom: 12px; }
+.fp-stat { text-align: center; padding: 7px 16px; background: #E3F2FD; border-radius: 8px; border: 1px solid #90CAF9; }
+.fp-stat-num { display: block; font-size: 18pt; font-weight: 700; color: #1565C0; }
+.fp-stat-lbl { display: block; font-size: 7pt; color: #78909C; margin-top: 2px; }
+.fp-day { margin-bottom: 8px; border: 1px solid #CFD8DC; border-radius: 6px; overflow: hidden; }
+.fp-day-hd { background: #1565C0; color: #fff; padding: 5px 8px; font-weight: 700; font-size: 9pt; }
+.fp-day-hd .fc { font-weight: 400; font-size: 7.5pt; color: #BBDEFB; margin-left: 6px; }
+.fp-day-bd { display: flex; flex-wrap: wrap; gap: 5px; padding: 7px 8px; }
+.fp-chip { padding: 3px 9px; background: #E8F5E9; border: 1px solid #A5D6A7; border-radius: 12px; font-size: 7.5pt; font-weight: 600; color: #2E7D32; }
+.fp-chip span { font-weight: 400; color: #555; font-size: 6.5pt; margin-left: 3px; }
+
+/* ── Period count table ── */
+.pc-table { width: 100%; border-collapse: collapse; }
+.pc-table th, .pc-table td { border: 1px solid #CFD8DC; padding: 3pt 2pt; text-align: center; vertical-align: middle; }
+.pc-table thead tr th { background: #1565C0; color: #fff; font-size: 7.5pt; font-weight: 700; }
+.pc-table thead tr th.th-name { text-align: left; }
+.td-sno { color: #78909C; font-size: 7pt; width: 22px; }
+.td-name { text-align: left !important; font-weight: 500; }
+.td-short { font-weight: 600; }
+.td-num { font-weight: 600; }
+.td-zero { background: #FFF3E0 !important; color: #E65100; }
+.td-full { background: #E8F5E9 !important; color: #2E7D32; }
+.td-total { background: #E3F2FD; font-weight: 700; color: #1565C0; }
+.td-detail { text-align: left !important; font-size: 6.5pt; color: #555; }
+.pc-summary { display: flex; gap: 10px; justify-content: center; margin-top: 10px; flex-wrap: wrap; }
+.pc-sum-item { text-align: center; padding: 5px 14px; background: #E3F2FD; border-radius: 6px; border: 1px solid #90CAF9; }
+.pc-sum-num { display: block; font-size: 14pt; font-weight: 700; color: #1565C0; }
+.pc-sum-lbl { display: block; font-size: 6.5pt; color: #78909C; }
+
+@media print {
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+'}</style></head><body>
+  <div class="rpt-header">
+    <div class="rpt-school">${esc(schoolName)}</div>
+    <div class="rpt-title">${esc(reportTitle)}</div>
+    <div class="rpt-sub">${esc(teacherName)}</div>
+  </div>
+  <table class="tt-table">
+    <thead><tr><th>Period / Day</th>${activeDays.map((d: string) => `<th>${esc(d)}</th>`).join('')}</tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <div class="rpt-footer">
+    <span class="fl">${esc(genTime)}</span>
+    <span class="fc">${esc(schoolName)} \u2014 ${esc(reportTitle)}</span>
+    <span class="fr">Page: 1 of 1</span>
+  </div>
 </body></html>`;
 }
 
 function buildFreePeriodsHtml(schoolName: string, teacherName: string, timings: any, entries: any[], teachers: any[], classes: any[], sections: any[], subjects: any[], teacherId: string): string {
   const activeDays = timings.days;
-  const teacherEntries = entries.filter((e: any) => e.teacherId === teacherId);
-  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-
-  const freePeriods: { day: string; period: number; time: string }[] = [];
+  const te = entries.filter((e: any) => e.teacherId === teacherId);
+  const genTime = new Date().toLocaleString('en-PK', { dateStyle: 'medium', timeStyle: 'short' });
+  const reportTitle = 'Free Periods Analysis';
+  const fps: { day: string; period: number; time: string }[] = [];
   activeDays.forEach((day: string) => {
     for (let p = 1; p <= timings.periodsPerDay; p++) {
       if (isBreakPeriod(p, timings)) continue;
-      if (!teacherEntries.some((e: any) => e.day === day && e.period === p)) {
-        freePeriods.push({ day, period: p, time: getPeriodTime(p, timings) });
-      }
+      if (!te.some((e: any) => e.day === day && e.period === p))
+        fps.push({ day, period: p, time: getPeriodTime(p, timings) });
     }
   });
-
-  const grouped = new Map<string, typeof freePeriods>();
-  freePeriods.forEach((fp) => { const list = grouped.get(fp.day) || []; list.push(fp); grouped.set(fp.day, list); });
-
-  const nonBreak = timings.periodsPerDay - (timings.periodTimingMode === 'custom' ? timings.customPeriodTimings.filter((pt: any) => pt.isBreak).length : (timings.breakAfterPeriod > 0 ? 1 : 0));
-  const totalTeaching = activeDays.length * nonBreak;
-  const pct = totalTeaching > 0 ? Math.round((freePeriods.length / totalTeaching) * 100) : 0;
-
+  const grouped = new Map<string, typeof fps>();
+  fps.forEach((fp) => { const l = grouped.get(fp.day) || []; l.push(fp); grouped.set(fp.day, l); });
+  const nonBreak = timings.periodTimingMode === 'custom'
+    ? timings.customPeriodTimings.filter((pt: any) => !pt.isBreak).length
+    : timings.periodsPerDay - (timings.breakAfterPeriod > 0 ? 1 : 0);
+  const total = activeDays.length * nonBreak;
+  const pct = total > 0 ? Math.round((fps.length / total) * 100) : 0;
   let dayBlocks = '';
   activeDays.forEach((day: string) => {
-    const dayFree = grouped.get(day);
-    if (!dayFree || dayFree.length === 0) return;
-    let items = dayFree.map((fp) => `<span class="fi">${getPeriodLabel(fp.period, timings)} (${esc(fp.time)})</span>`).join('');
-    dayBlocks += `<div class="db"><div class="dh">${esc(day)} <span class="fc">${dayFree.length} free</span></div><div class="di">${items}</div></div>`;
+    const df = grouped.get(day);
+    if (!df || df.length === 0) return;
+    const chips = df.map((fp) => `<span class="fp-chip">${getPeriodLabel(fp.period, timings)} <span>${esc(fp.time)}</span></span>`).join('');
+    dayBlocks += `<div class="fp-day"><div class="fp-day-hd">${esc(day)}<span class="fc">${df.length} free</span></div><div class="fp-day-bd">${chips}</div></div>`;
   });
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${'
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: Arial, 'Helvetica Neue', sans-serif; font-size: 9pt; color: #1a1a2e; background: #fff; }
 
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-@page{size:A4 portrait;margin:12mm 10mm 16mm 10mm}
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:10px;color:#1D1D1F}
-.rh{text-align:center;padding-bottom:8px;margin-bottom:10px;border-bottom:2px solid #007AFF}
-.sn{font-size:16px;font-weight:700}.rt{font-size:12px;font-weight:600;color:#333;margin-top:2px}.rs{font-size:10px;color:#666;margin-top:1px}
-.sr{display:flex;gap:14px;margin-bottom:12px;justify-content:center}
-.si{text-align:center;padding:8px 16px;background:#F5F5F7;border-radius:8px;border:1px solid #E5E5EA}
-.sn2{display:block;font-size:18px;font-weight:700;color:#007AFF}.sl{display:block;font-size:8px;color:#86868B;margin-top:2px}
-.db{margin-bottom:8px;border:1px solid #E5E5EA;border-radius:6px;overflow:hidden}
-.dh{background:#F5F5F7;padding:5px 8px;font-weight:600;font-size:10px;border-bottom:1px solid #E5E5EA}
-.fc{font-weight:400;font-size:8px;color:#007AFF;margin-left:4px}
-.di{display:flex;flex-wrap:wrap;gap:5px;padding:6px 8px}
-.fi{padding:3px 8px;background:#E8F5E9;border:1px solid #C8E6C9;border-radius:4px;font-size:8px;font-weight:600;color:#2E7D32}
-.rf{margin-top:12px;padding-top:6px;border-top:1px solid #E5E5EA;display:flex;justify-content:space-between;font-size:7px;color:#86868B}
-@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
-</style></head><body>
-<div class="rh"><div class="sn">${esc(schoolName)}</div><div class="rt">Free Periods Analysis</div><div class="rs">${esc(teacherName)}</div></div>
-<div class="sr">
-  <div class="si"><span class="sn2">${freePeriods.length}</span><span class="sl">Free Periods</span></div>
-  <div class="si"><span class="sn2">${totalTeaching}</span><span class="sl">Total Periods</span></div>
-  <div class="si"><span class="sn2">${pct}%</span><span class="sl">Free</span></div>
-</div>
-${dayBlocks}
-<div class="rf"><span>${esc(today)}</span><span>Generated by Timetable Manager</span></div>
+/* ── Page setup ── */
+@page { size: A4 portrait; margin: 14mm 12mm 14mm 12mm; }
+@page { @bottom-left   { content: attr(data-gen-time); font-family: Arial; font-size: 7pt; color: #888; } }
+@page { @bottom-center { content: attr(data-footer-mid); font-family: Arial; font-size: 7pt; color: #888; } }
+@page { @bottom-right  { content: "Page " counter(page) " of " counter(pages); font-family: Arial; font-size: 7pt; color: #888; } }
+
+/* ── Header block ── */
+.rpt-header { text-align: center; padding-bottom: 8px; margin-bottom: 10px; border-bottom: 3px solid #1565C0; }
+.rpt-school { font-size: 15pt; font-weight: 700; color: #0D47A1; letter-spacing: 0.5px; }
+.rpt-title  { font-size: 11pt; font-weight: 600; color: #1a1a2e; margin-top: 3px; }
+.rpt-sub    { font-size: 9pt;  color: #555; margin-top: 2px; }
+
+/* ── Footer bar ── */
+.rpt-footer {
+  margin-top: 12px; padding-top: 6px;
+  border-top: 1px solid #B0BEC5;
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 7pt; color: #78909C;
+}
+.rpt-footer .fl { text-align: left; }
+.rpt-footer .fc { text-align: center; flex: 1; }
+.rpt-footer .fr { text-align: right; }
+
+/* ── Timetable grid ── */
+.tt-table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+.tt-table th, .tt-table td { border: 1px solid #CFD8DC; padding: 3pt 2pt; text-align: center; vertical-align: middle; }
+.tt-table thead th { background: #1565C0; color: #fff; font-size: 8pt; font-weight: 700; }
+.tt-table thead th:first-child { background: #0D47A1; }
+.tt-period { background: #E3F2FD; font-size: 7.5pt; width: 70px; min-width: 70px; }
+.tt-period .pl { display: block; font-weight: 700; color: #0D47A1; }
+.tt-period .pt { display: block; font-size: 6pt; color: #78909C; margin-top: 1px; }
+.tt-filled { font-size: 8pt; }
+.tt-filled b { display: block; color: #1a237e; }
+.tt-filled .tn { display: block; font-size: 6.5pt; color: #455A64; margin-top: 1px; }
+.tt-empty { color: #CFD8DC; font-size: 10pt; }
+.tt-break td { background: #FFF8E1 !important; }
+.tt-break-cell { font-style: italic; color: #F57F17; font-size: 8pt; }
+
+/* ── Free periods ── */
+.fp-stats { display: flex; gap: 10px; justify-content: center; margin-bottom: 12px; }
+.fp-stat { text-align: center; padding: 7px 16px; background: #E3F2FD; border-radius: 8px; border: 1px solid #90CAF9; }
+.fp-stat-num { display: block; font-size: 18pt; font-weight: 700; color: #1565C0; }
+.fp-stat-lbl { display: block; font-size: 7pt; color: #78909C; margin-top: 2px; }
+.fp-day { margin-bottom: 8px; border: 1px solid #CFD8DC; border-radius: 6px; overflow: hidden; }
+.fp-day-hd { background: #1565C0; color: #fff; padding: 5px 8px; font-weight: 700; font-size: 9pt; }
+.fp-day-hd .fc { font-weight: 400; font-size: 7.5pt; color: #BBDEFB; margin-left: 6px; }
+.fp-day-bd { display: flex; flex-wrap: wrap; gap: 5px; padding: 7px 8px; }
+.fp-chip { padding: 3px 9px; background: #E8F5E9; border: 1px solid #A5D6A7; border-radius: 12px; font-size: 7.5pt; font-weight: 600; color: #2E7D32; }
+.fp-chip span { font-weight: 400; color: #555; font-size: 6.5pt; margin-left: 3px; }
+
+/* ── Period count table ── */
+.pc-table { width: 100%; border-collapse: collapse; }
+.pc-table th, .pc-table td { border: 1px solid #CFD8DC; padding: 3pt 2pt; text-align: center; vertical-align: middle; }
+.pc-table thead tr th { background: #1565C0; color: #fff; font-size: 7.5pt; font-weight: 700; }
+.pc-table thead tr th.th-name { text-align: left; }
+.td-sno { color: #78909C; font-size: 7pt; width: 22px; }
+.td-name { text-align: left !important; font-weight: 500; }
+.td-short { font-weight: 600; }
+.td-num { font-weight: 600; }
+.td-zero { background: #FFF3E0 !important; color: #E65100; }
+.td-full { background: #E8F5E9 !important; color: #2E7D32; }
+.td-total { background: #E3F2FD; font-weight: 700; color: #1565C0; }
+.td-detail { text-align: left !important; font-size: 6.5pt; color: #555; }
+.pc-summary { display: flex; gap: 10px; justify-content: center; margin-top: 10px; flex-wrap: wrap; }
+.pc-sum-item { text-align: center; padding: 5px 14px; background: #E3F2FD; border-radius: 6px; border: 1px solid #90CAF9; }
+.pc-sum-num { display: block; font-size: 14pt; font-weight: 700; color: #1565C0; }
+.pc-sum-lbl { display: block; font-size: 6.5pt; color: #78909C; }
+
+@media print {
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+'}</style></head><body>
+  <div class="rpt-header">
+    <div class="rpt-school">${esc(schoolName)}</div>
+    <div class="rpt-title">${esc(reportTitle)}</div>
+    <div class="rpt-sub">${esc(teacherName)}</div>
+  </div>
+  <div class="fp-stats">
+    <div class="fp-stat"><span class="fp-stat-num">${fps.length}</span><span class="fp-stat-lbl">Free Periods</span></div>
+    <div class="fp-stat"><span class="fp-stat-num">${total - fps.length}</span><span class="fp-stat-lbl">Assigned</span></div>
+    <div class="fp-stat"><span class="fp-stat-num">${total}</span><span class="fp-stat-lbl">Total Slots</span></div>
+    <div class="fp-stat"><span class="fp-stat-num">${pct}%</span><span class="fp-stat-lbl">Free Rate</span></div>
+  </div>
+  ${dayBlocks}
+  <div class="rpt-footer">
+    <span class="fl">${esc(genTime)}</span>
+    <span class="fc">${esc(schoolName)} \u2014 ${esc(reportTitle)}</span>
+    <span class="fr">Page: 1 of 1</span>
+  </div>
 </body></html>`;
 }
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+  font-size: 9px;
+  color: #1D1D1F;
+}
+/* ── Page header (visible, printed at top of document) ── */
+.page-header {
+  text-align: center;
+  padding-bottom: 8px;
+  margin-bottom: 10px;
+  border-bottom: 2.5px solid #007AFF;
+}
+.page-header .school-name { font-size: 16px; font-weight: 700; color: #1D1D1F; letter-spacing: -0.3px; }
+.page-header .report-title { font-size: 12px; font-weight: 600; color: #333; margin-top: 3px; }
+.page-header .report-sub { font-size: 10px; color: #555; margin-top: 2px; }
+/* ── Footer table (fixed at bottom of every printed page) ── */
+.page-footer {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  display: table;
+  width: 100%;
+  border-top: 1px solid #D1D1D6;
+  padding-top: 4px;
+  font-size: 7px;
+  color: #86868B;
+}
+.page-footer .f-left   { display: table-cell; text-align: left;   width: 33%; }
+.page-footer .f-center { display: table-cell; text-align: center; width: 34%; }
+.page-footer .f-right  { display: table-cell; text-align: right;  width: 33%; }
+/* ── Timetable grid ── */
+table.tt { width: 100%; border-collapse: collapse; }
+table.tt th, table.tt td { border: 1px solid #D1D1D6; padding: 3px 2px; text-align: center; vertical-align: middle; }
+table.tt th { background: #E8EAF6; font-size: 8px; font-weight: 700; color: #1a237e; }
+.tp { background: #FAFAFA; font-size: 8px; width: 68px; min-width: 68px; }
+.pl { display: block; font-weight: 700; color: #1D1D1F; }
+.tt-time { display: block; font-size: 6.5px; color: #86868B; margin-top: 1px; }
+.tf { font-size: 9px; }
+.tn { display: block; font-size: 7px; color: #555; margin-top: 1px; }
+.tb { font-size: 9px; color: #E65100; background: #FFF3E0 !important; font-style: italic; }
+.te { color: #C7C7CC; }
+.brk td { background: #FFF3E0 !important; }
+/* ── Free periods ── */
+.sr { display: flex; gap: 12px; margin-bottom: 12px; justify-content: center; }
+.si { text-align: center; padding: 8px 18px; background: #E8EAF6; border-radius: 8px; border: 1px solid #C5CAE9; }
+.sn2 { display: block; font-size: 20px; font-weight: 700; color: #283593; }
+.sl { display: block; font-size: 8px; color: #86868B; margin-top: 2px; }
+.db { margin-bottom: 8px; border: 1px solid #E5E5EA; border-radius: 6px; overflow: hidden; }
+.dh { background: #F5F5F7; padding: 5px 8px; font-weight: 700; font-size: 10px; border-bottom: 1px solid #E5E5EA; }
+.fc { font-weight: 400; font-size: 8px; color: #283593; margin-left: 5px; }
+.di { display: flex; flex-wrap: wrap; gap: 5px; padding: 6px 8px; }
+.fi { padding: 3px 8px; background: #E8F5E9; border: 1px solid #A5D6A7; border-radius: 4px; font-size: 8px; font-weight: 600; color: #2E7D32; }
+@media print {
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .page-footer { position: fixed; bottom: 0; }
+}
+
+</style></head><body>
+  <div class="page-header">
+    <div class="school-name">${esc(schoolName)}</div>
+    <div class="report-title">${esc(reportTitle)}</div>
+    <div class="report-sub">${esc(teacherName)}</div>
+  </div>
+  <div class="page-footer">
+    <span class="f-left">${esc(genTime)}</span>
+    <span class="f-center">${esc(schoolName)} &mdash; ${esc(reportTitle)}</span>
+    <span class="f-right">Page: 1 of 1</span>
+  </div>
+  <div class="sr">
+    <div class="si"><span class="sn2">${freePeriods.length}</span><span class="sl">Free Periods</span></div>
+    <div class="si"><span class="sn2">${totalTeaching}</span><span class="sl">Total Periods</span></div>
+    <div class="si"><span class="sn2">${pct}%</span><span class="sl">Free Rate</span></div>
+  </div>
+  ${dayBlocks}
+</body></html>`;
+}
+
