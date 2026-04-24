@@ -31,12 +31,216 @@ import {
   Plus,
   CalendarDays,
   AlertCircle,
+  Download,
+  Loader2,
 } from 'lucide-react';
 
+/* ====================================================================
+   Iframe-based Print Helper (same as reports-tab)
+   ==================================================================== */
+
+function printViaIframe(htmlContent: string, _title: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const existing = document.getElementById('__report_print_iframe__');
+    if (existing) existing.remove();
+
+    const iframe = document.createElement('iframe');
+    iframe.id = '__report_print_iframe__';
+    iframe.setAttribute('aria-hidden', 'true');
+    iframe.style.cssText =
+      'position:fixed;left:-99999px;top:-99999px;width:0;height:0;border:none;opacity:0;pointer-events:none;';
+    document.body.appendChild(iframe);
+
+    iframe.srcdoc = htmlContent;
+
+    iframe.onload = () => {
+      try {
+        const iw = iframe.contentWindow;
+        if (!iw) { iframe.remove(); reject(new Error('Iframe contentWindow unavailable')); return; }
+        setTimeout(() => {
+          try {
+            iw.focus();
+            iw.print();
+            resolve();
+          } catch (e) { reject(e); }
+          finally {
+            setTimeout(() => { iframe.remove(); }, 60_000);
+          }
+        }, 350);
+      } catch (err) { iframe.remove(); reject(err); }
+    };
+
+    iframe.onerror = () => { iframe.remove(); reject(new Error('Iframe failed to load')); };
+  });
+}
+
+function esc(str: string): string {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/* ====================================================================
+   Build Substitute Report HTML
+   ==================================================================== */
+
+function buildSubstituteReportHtml(
+  schoolName: string,
+  date: string,
+  dayOfWeek: string,
+  substitutes: {
+    originalTeacherId: string;
+    substituteTeacherId: string;
+    entryId: string;
+  }[],
+  store: ReturnType<typeof useTimetableStore.getState>
+): string {
+  const { entries, teachers, subjects, classes, sections } = store;
+  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+  const getTeacher = (id: string) => teachers.find((t) => t.id === id);
+  const getSubject = (id: string) => subjects.find((s) => s.id === id);
+  const getClass = (id: string) => classes.find((c) => c.id === id);
+  const getSection = (id: string) => sections.find((s) => s.id === id);
+
+  // Build rows sorted by period
+  const rows = substitutes.map((sub) => {
+    const entry = entries.find((e) => e.id === sub.entryId);
+    const originalTeacher = getTeacher(sub.originalTeacherId);
+    const subTeacher = getTeacher(sub.substituteTeacherId);
+    const subject = entry ? getSubject(entry.subjectId) : null;
+    const cls = entry ? getClass(entry.classId) : null;
+    const sec = entry ? getSection(entry.sectionId) : null;
+
+    return {
+      period: entry?.period || 0,
+      originalTeacher: originalTeacher?.name || '?',
+      subTeacher: subTeacher?.name || '?',
+      subject: subject?.shortName || '?',
+      classSection: `${cls?.name || '?'}-${sec?.name || '?'}`,
+    };
+  }).sort((a, b) => a.period - b.period);
+
+  let tableRows = '';
+  rows.forEach((row, idx) => {
+    const rowBg = idx % 2 === 0 ? 'background:#FFFFFF;' : 'background:#F8F9FA;';
+    tableRows += `<tr style="${rowBg}">
+      <td style="text-align:center;font-weight:600;">${row.period}</td>
+      <td>${esc(row.originalTeacher)}</td>
+      <td>${esc(row.subTeacher)}</td>
+      <td>${esc(row.subject)}</td>
+      <td>${esc(row.classSection)}</td>
+    </tr>`;
+  });
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @page {
+    size: A4 portrait;
+    margin: 15mm 15mm 20mm 15mm;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; font-size: 11px; color: #1D1D1F; background: #fff; }
+
+  .report-header { text-align: center; padding-bottom: 8px; margin-bottom: 12px; }
+  .header-bar { width: 100%; height: 3px; background: linear-gradient(to right, transparent, #1B2A4A, transparent); margin-bottom: 10px; }
+  .school-name { font-size: 20px; font-weight: 700; color: #1B2A4A; letter-spacing: -0.3px; }
+  .report-title { font-size: 14px; font-weight: 600; color: #333; margin-top: 4px; }
+  .report-subtitle { font-size: 11px; color: #666; margin-top: 2px; }
+
+  .summary-row { display: flex; gap: 20px; justify-content: center; margin: 16px 0; }
+  .summary-stat { text-align: center; padding: 8px 20px; background: #F8F9FA; border-radius: 8px; border: 1px solid #DEE2E6; }
+  .stat-num { display: block; font-size: 20px; font-weight: 700; color: #1B2A4A; }
+  .stat-label { display: block; font-size: 9px; color: #86868B; margin-top: 2px; }
+
+  .report-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  .report-table th {
+    background: #1B2A4A;
+    color: #fff;
+    padding: 8px 12px;
+    text-align: center;
+    font-weight: 600;
+    font-size: 10px;
+    border: 1px solid #1B2A4A;
+  }
+  .report-table th:first-child { border-radius: 6px 0 0 0; }
+  .report-table th:last-child { border-radius: 0 6px 0 0; }
+  .report-table td {
+    padding: 6px 12px;
+    text-align: center;
+    font-size: 10px;
+    border: 1px solid #E5E5EA;
+  }
+
+  .report-footer {
+    margin-top: 16px;
+    padding-top: 8px;
+    border-top: 1px solid #E5E5EA;
+    display: flex;
+    justify-content: space-between;
+    font-size: 8px;
+    color: #86868B;
+  }
+  .watermark { font-style: italic; color: #bbb; }
+
+  @media print {
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+  <div class="report-header">
+    <div class="header-bar"></div>
+    <div class="school-name">${esc(schoolName)}</div>
+    <div class="report-title">Substitute Teacher Report</div>
+    <div class="report-subtitle">${esc(date)} &mdash; ${esc(dayOfWeek)}</div>
+  </div>
+
+  <div class="summary-row">
+    <div class="summary-stat">
+      <span class="stat-num">${substitutes.length}</span>
+      <span class="stat-label">Substitutions</span>
+    </div>
+    <div class="summary-stat">
+      <span class="stat-num">${new Set(substitutes.map(s => s.substituteTeacherId)).size}</span>
+      <span class="stat-label">Substitute Teachers</span>
+    </div>
+  </div>
+
+  <table class="report-table">
+    <thead>
+      <tr>
+        <th>Period</th>
+        <th>Original Teacher</th>
+        <th>Substitute Teacher</th>
+        <th>Subject</th>
+        <th>Class-Section</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${tableRows}
+    </tbody>
+  </table>
+
+  <div class="report-footer">
+    <span>${esc(today)}</span>
+    <span class="watermark">Generated by TimetableWiz</span>
+    <span>Page <span class="page-num"></span></span>
+  </div>
+</body>
+</html>`;
+}
+
+/* ====================================================================
+   SubstitutesTab
+   ==================================================================== */
+
 export function SubstitutesTab() {
-  const { substitutes, teachers, entries, timings, addSubstitute, deleteSubstitute } =
+  const { substitutes, teachers, entries, timings, schoolName, addSubstitute, deleteSubstitute } =
     useTimetableStore();
   const { toast } = useToast();
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const [selectedDate, setSelectedDate] = useState(() => {
     const today = new Date().toISOString().split('T')[0];
@@ -127,6 +331,38 @@ export function SubstitutesTab() {
     return teachers.filter((t) => !busyTeacherIds.has(t.id));
   };
 
+  // Download substitute report
+  const handleDownloadReport = async () => {
+    setIsGenerating(true);
+    try {
+      const html = buildSubstituteReportHtml(
+        schoolName,
+        selectedDate,
+        dayOfWeek,
+        daySubstitutes.map((s) => ({
+          originalTeacherId: s.originalTeacherId,
+          substituteTeacherId: s.substituteTeacherId,
+          entryId: s.entryId,
+        })),
+        useTimetableStore.getState()
+      );
+      await printViaIframe(html, `Substitute_Report_${selectedDate}`);
+      toast({
+        title: 'Print dialog opened',
+        description: 'Choose "Save as PDF" to download the report.',
+      });
+    } catch (err) {
+      console.error('Report generation failed:', err);
+      toast({
+        title: 'Print failed',
+        description: 'An error occurred while preparing the report.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Date Selection */}
@@ -162,8 +398,25 @@ export function SubstitutesTab() {
       {daySubstitutes.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Active Substitutes for {selectedDate}</CardTitle>
-            <CardDescription>{daySubstitutes.length} substitution{daySubstitutes.length !== 1 ? 's' : ''} active</CardDescription>
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <CardTitle className="text-lg">Active Substitutes for {selectedDate}</CardTitle>
+                <CardDescription>{daySubstitutes.length} substitution{daySubstitutes.length !== 1 ? 's' : ''} active</CardDescription>
+              </div>
+              <Button
+                onClick={handleDownloadReport}
+                disabled={isGenerating}
+                size="sm"
+                className="gap-1.5"
+              >
+                {isGenerating ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+                Download Substitute Report
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="space-y-2 max-h-64 overflow-y-auto">

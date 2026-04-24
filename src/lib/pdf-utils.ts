@@ -28,22 +28,22 @@ function esc(str: string): string {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-// Subject color palette for PDF (using softer print-friendly colors)
+// Subject color palette for PDF (using more saturated, vibrant print-friendly colors)
 const SUBJECT_COLORS = [
-  { bg: '#E8F5E9', text: '#2E7D32', border: '#C8E6C9' },
-  { bg: '#FFF3E0', text: '#E65100', border: '#FFE0B2' },
-  { bg: '#FCE4EC', text: '#C62828', border: '#F8BBD0' },
-  { bg: '#E0F2F1', text: '#00695C', border: '#B2DFDB' },
-  { bg: '#FFF8E1', text: '#F57F17', border: '#FFECB3' },
-  { bg: '#F3E5F5', text: '#6A1B9A', border: '#E1BEE7' },
-  { bg: '#E1F5FE', text: '#01579B', border: '#B3E5FC' },
-  { bg: '#FBE9E7', text: '#BF360C', border: '#FFCCBC' },
-  { bg: '#F1F8E9', text: '#33691E', border: '#DCEDC8' },
-  { bg: '#EDE7F6', text: '#4527A0', border: '#D1C4E9' },
-  { bg: '#E0F7FA', text: '#00838F', border: '#B2EBF2' },
-  { bg: '#FFF9C4', text: '#827717', border: '#FFF59D' },
-  { bg: '#EFEBE9', text: '#4E342E', border: '#D7CCC8' },
-  { bg: '#E8EAF6', text: '#283593', border: '#C5CAE9' },
+  { bg: '#C8E6C9', text: '#1B5E20', border: '#A5D6A7' },
+  { bg: '#FFE0B2', text: '#BF360C', border: '#FFCC80' },
+  { bg: '#F8BBD0', text: '#AD1457', border: '#F48FB1' },
+  { bg: '#B2DFDB', text: '#004D40', border: '#80CBC4' },
+  { bg: '#FFF59D', text: '#F57F17', border: '#FFF176' },
+  { bg: '#E1BEE7', text: '#6A1B9A', border: '#CE93D8' },
+  { bg: '#B3E5FC', text: '#01579B', border: '#81D4FA' },
+  { bg: '#FFCCBC', text: '#BF360C', border: '#FFAB91' },
+  { bg: '#DCEDC8', text: '#33691E', border: '#C5E1A5' },
+  { bg: '#D1C4E9', text: '#4527A0', border: '#B39DDB' },
+  { bg: '#B2EBF2', text: '#006064', border: '#80DEEA' },
+  { bg: '#FFF9C4', text: '#827717', border: '#FFF176' },
+  { bg: '#D7CCC8', text: '#3E2723', border: '#BCAAA4' },
+  { bg: '#C5CAE9', text: '#1A237E', border: '#9FA8DA' },
 ];
 
 const colorCache = new Map<string, number>();
@@ -104,7 +104,8 @@ export function generatePdfHtml(opts: PdfReportOptions): string {
 
   // Build table rows
   const buildGridHtml = () => {
-    let html = '<table class="tt-grid">';
+    let html = '<div style="border-radius:6px;overflow:hidden;border:1px solid #D1D1D6;">';
+    html += '<table class="tt-grid">';
 
     // Header row
     html += '<thead><tr><th class="th-corner">Day / Period</th>';
@@ -157,7 +158,7 @@ export function generatePdfHtml(opts: PdfReportOptions): string {
       html += '</tr>';
     });
 
-    html += '</tbody></table>';
+    html += '</tbody></table></div>';
     return html;
   };
 
@@ -228,7 +229,7 @@ export function generatePdfHtml(opts: PdfReportOptions): string {
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Roboto, Arial, sans-serif;
     font-size: 10px;
     line-height: 1.4;
     color: #1D1D1F;
@@ -240,12 +241,17 @@ export function generatePdfHtml(opts: PdfReportOptions): string {
     text-align: center;
     padding-bottom: 10px;
     margin-bottom: 12px;
-    border-bottom: 2px solid #007AFF;
+  }
+  .header-bar {
+    width: 100%;
+    height: 3px;
+    background: linear-gradient(to right, transparent, #1B2A4A, transparent);
+    margin-bottom: 10px;
   }
   .school-name {
     font-size: 18px;
     font-weight: 700;
-    color: #1D1D1F;
+    color: #1B2A4A;
     letter-spacing: -0.3px;
   }
   .report-title {
@@ -273,21 +279,21 @@ export function generatePdfHtml(opts: PdfReportOptions): string {
     vertical-align: middle;
   }
   .th-corner {
-    background: #F5F5F7;
+    background: #1B2A4A;
     font-weight: 600;
     font-size: 9px;
-    color: #333;
+    color: #fff;
     width: 70px;
     min-width: 70px;
   }
   .th-day {
-    background: #F5F5F7;
+    background: #1B2A4A;
     font-weight: 600;
     font-size: 9px;
-    color: #333;
+    color: #fff;
   }
   .td-period {
-    background: #FAFAFA;
+    background: #F1F3F5;
     width: 70px;
     min-width: 70px;
     text-align: center;
@@ -306,11 +312,11 @@ export function generatePdfHtml(opts: PdfReportOptions): string {
     margin-top: 1px;
   }
   .break-row td {
-    background: #FFF8E1 !important;
+    background: linear-gradient(135deg, #FFF8E1, #FFECB3) !important;
   }
   .td-break {
     font-size: 10px;
-    color: #FF9500;
+    color: #E65100;
   }
   .td-filled {
     border: 1px solid;
@@ -333,6 +339,11 @@ export function generatePdfHtml(opts: PdfReportOptions): string {
     font-size: 10px;
   }
 
+  /* Alternating rows */
+  .tt-grid tbody tr:nth-child(even) td.td-empty { background: #F8F9FA; }
+  .tt-grid tbody tr:nth-child(even) td.td-filled { background: #F8F9FA; }
+  .tt-grid tbody tr:nth-child(even) td.td-period { background: #E9ECEF; }
+
   /* Free Periods */
   .free-periods { margin-top: 8px; }
   .summary-row {
@@ -344,11 +355,11 @@ export function generatePdfHtml(opts: PdfReportOptions): string {
   .summary-stat {
     text-align: center;
     padding: 10px 20px;
-    background: #F5F5F7;
+    background: #F8F9FA;
     border-radius: 10px;
-    border: 1px solid #E5E5EA;
+    border: 1px solid #DEE2E6;
   }
-  .stat-num { display: block; font-size: 22px; font-weight: 700; color: #007AFF; }
+  .stat-num { display: block; font-size: 22px; font-weight: 700; color: #1B2A4A; }
   .stat-label { display: block; font-size: 9px; color: #86868B; margin-top: 2px; }
   .day-block {
     margin-bottom: 10px;
@@ -357,17 +368,17 @@ export function generatePdfHtml(opts: PdfReportOptions): string {
     overflow: hidden;
   }
   .day-header {
-    background: #F5F5F7;
+    background: #1B2A4A;
     padding: 6px 10px;
     font-weight: 600;
     font-size: 11px;
-    color: #1D1D1F;
-    border-bottom: 1px solid #E5E5EA;
+    color: #fff;
+    border-bottom: 1px solid #1B2A4A;
   }
   .free-count {
     font-weight: 400;
     font-size: 9px;
-    color: #007AFF;
+    color: #B0BEC5;
     margin-left: 6px;
   }
   .free-items { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px; }
@@ -376,12 +387,12 @@ export function generatePdfHtml(opts: PdfReportOptions): string {
     align-items: center;
     gap: 6px;
     padding: 4px 10px;
-    background: #E8F5E9;
-    border: 1px solid #C8E6C9;
+    background: #C8E6C9;
+    border: 1px solid #A5D6A7;
     border-radius: 6px;
     font-size: 9px;
   }
-  .free-period { font-weight: 600; color: #2E7D32; }
+  .free-period { font-weight: 600; color: #1B5E20; }
   .free-time { color: #666; font-size: 8px; }
 
   /* Footer */
@@ -394,10 +405,16 @@ export function generatePdfHtml(opts: PdfReportOptions): string {
     font-size: 8px;
     color: #86868B;
   }
+  .watermark { font-style: italic; color: #bbb; }
+
+  @media print {
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
 </style>
 </head>
 <body>
   <div class="report-header">
+    <div class="header-bar"></div>
     <div class="school-name">${esc(schoolName)}</div>
     <div class="report-title">${esc(reportTitle)}</div>
     ${subtitle ? `<div class="report-subtitle">${esc(subtitle)}</div>` : ''}
@@ -407,7 +424,7 @@ export function generatePdfHtml(opts: PdfReportOptions): string {
 
   <div class="report-footer">
     <span>${esc(today)}</span>
-    <span>Generated by Timetable Manager</span>
+    <span class="watermark">Generated by TimetableWiz</span>
     <span>Page <span class="page-num"></span></span>
   </div>
 </body>
