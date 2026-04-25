@@ -2055,34 +2055,50 @@ function esc(str: string): string {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+/* ---------- Group sheet-slots into page-group wrappers for N-up layout ---------- */
+
+function groupSlotsIntoPages(slots: string[], sheetsPerPage: number): string {
+  if (sheetsPerPage <= 1) return slots.join('\n');
+  let html = '';
+  for (let i = 0; i < slots.length; i += sheetsPerPage) {
+    const chunk = slots.slice(i, i + sheetsPerPage);
+    html += `<div class="page-group">${chunk.join('\n')}</div>\n`;
+  }
+  return html;
+}
+
 /* ---------- Shared professional CSS for timetable grid reports ---------- */
 
 function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string {
   const nUpCss = sheetsPerPage > 1 ? `
   body.sheets-multi {
+    margin: 0;
+    padding: 0;
+  }
+  body.sheets-multi .page-group {
     display: flex;
     flex-direction: column;
-    gap: 0;
     height: 100vh;
+    box-sizing: border-box;
+    page-break-after: always;
+    break-after: page;
+    page-break-inside: avoid;
+    break-inside: avoid;
     overflow: hidden;
     padding-bottom: 14px;
   }
-  body.sheets-multi .sheet-slot {
+  body.sheets-multi .page-group:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+  body.sheets-multi .page-group .sheet-slot {
     flex: 1 1 0;
-    max-height: calc((100vh - 14px) / ${sheetsPerPage});
     min-height: 0;
+    max-height: calc((100vh - 14px) / ${sheetsPerPage});
     page-break-inside: avoid;
     break-inside: avoid;
     padding: 2px 0;
     overflow: hidden;
-  }
-  body.sheets-multi .sheet-slot:nth-child(${sheetsPerPage}n) {
-    page-break-after: always;
-    break-after: page;
-  }
-  body.sheets-multi .sheet-slot:last-child {
-    page-break-after: auto;
-    break-after: auto;
   }` : '\n  body.sheets-multi .sheet-slot { width: 100%; }';
 
   /* ── Landscape single-sheet: table fills full A4 page ── */
@@ -2432,6 +2448,8 @@ function buildCombinedClassTimetableHtml(
   const reportTitle = 'Class Timetable Report';
 
   let timetablesHtml = '';
+  const slots: string[] = [];
+
   for (let idx = 0; idx < combos.length; idx++) {
     const combo = combos[idx];
     const cls = classes.find((c) => c.id === combo.classId);
@@ -2473,18 +2491,12 @@ function buildCombinedClassTimetableHtml(
     }
 
     if (s.sheetsPerPage > 1) {
-      // Multi-sheet mode: only generate the correct header type for this position
-      const headerHtml = isFirstOnPage
+      // isFirstOnPage now means first slot in its page-group chunk
+      const posInGroup = idx % s.sheetsPerPage;
+      const headerHtml = posInGroup === 0
         ? `<div class="page-header"><div class="header-bar"></div><div class="school-name">${esc(schoolName)}</div><div class="report-title">${esc(reportTitle)}</div><div class="report-sub">${esc(subtitle)}</div>${customHeaderHtml}</div>`
         : `<div class="sheet-label"><div class="sheet-label-sub">${esc(subtitle)}</div></div>`;
-      timetablesHtml += `
-    <div class="sheet-slot">
-      ${headerHtml}
-      <table class="tt">
-        <thead><tr><th>Day / Period</th>${activeDays.map((d: string) => `<th>${esc(d)}</th>`).join('')}</tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>`;
+      slots.push(`<div class="sheet-slot">${headerHtml}<table class="tt"><thead><tr><th>Day / Period</th>${activeDays.map((d: string) => `<th>${esc(d)}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>`);
     } else {
       // Single sheet per page — each timetable on its own page
       timetablesHtml += `
@@ -2502,6 +2514,10 @@ function buildCombinedClassTimetableHtml(
       </table>
     </div>`;
     }
+  }
+
+  if (s.sheetsPerPage > 1) {
+    timetablesHtml = groupSlotsIntoPages(slots, s.sheetsPerPage);
   }
 
   const customFooterHtml = s.footerContent ? `<div class="custom-footer">${esc(s.footerContent)}</div>` : '';
@@ -2537,6 +2553,8 @@ function buildCombinedTeacherScheduleHtml(
   const reportTitle = 'Teacher Schedule Report';
 
   let timetablesHtml = '';
+  const slots: string[] = [];
+
   for (let idx = 0; idx < teacherList.length; idx++) {
     const tchr = teacherList[idx];
     const filteredEntries = entries.filter((e) => e.teacherId === tchr.id);
@@ -2577,17 +2595,11 @@ function buildCombinedTeacherScheduleHtml(
     }
 
     if (s.sheetsPerPage > 1) {
-      const headerHtml = isFirstOnPage
+      const posInGroup = idx % s.sheetsPerPage;
+      const headerHtml = posInGroup === 0
         ? `<div class="page-header"><div class="header-bar"></div><div class="school-name">${esc(schoolName)}</div><div class="report-title">${esc(reportTitle)}</div><div class="report-sub">${esc(tchr.name)}</div>${customHeaderHtml}</div>`
         : `<div class="sheet-label"><div class="sheet-label-sub">${esc(tchr.name)}</div></div>`;
-      timetablesHtml += `
-    <div class="sheet-slot">
-      ${headerHtml}
-      <table class="tt">
-        <thead><tr><th>Day / Period</th>${activeDays.map((d: string) => `<th>${esc(d)}</th>`).join('')}</tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>`;
+      slots.push(`<div class="sheet-slot">${headerHtml}<table class="tt"><thead><tr><th>Day / Period</th>${activeDays.map((d: string) => `<th>${esc(d)}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>`);
     } else {
       timetablesHtml += `
     <div class="timetable-page">
@@ -2604,6 +2616,10 @@ function buildCombinedTeacherScheduleHtml(
       </table>
     </div>`;
     }
+  }
+
+  if (s.sheetsPerPage > 1) {
+    timetablesHtml = groupSlotsIntoPages(slots, s.sheetsPerPage);
   }
 
   const customFooterHtml = s.footerContent ? `<div class="custom-footer">${esc(s.footerContent)}</div>` : '';
@@ -2802,6 +2818,8 @@ function buildDaywiseScheduleHtml(
   const getT = (id: string) => teachers.find((t: any) => t.id === id);
 
   let dayBlocksHtml = '';
+  const slots: string[] = [];
+
   for (let idx = 0; idx < selectedDays.length; idx++) {
     const day = selectedDays[idx];
     let rows = '';
@@ -2833,20 +2851,11 @@ function buildDaywiseScheduleHtml(
     }
 
     if (s.sheetsPerPage > 1) {
-      const isFirstOnPage = idx % s.sheetsPerPage === 0;
-      const dayHeaderHtml = isFirstOnPage
+      const posInGroup = idx % s.sheetsPerPage;
+      const dayHeaderHtml = posInGroup === 0
         ? `<div class="page-header"><div class="header-bar"></div><div class="school-name">${esc(schoolName)}</div><div class="report-title">${esc(reportTitle)}</div><div class="report-sub">${esc(day)} | ${combos.length} class${combos.length !== 1 ? 'es' : ''}</div>${s.headerContent ? `<div class="custom-header">${esc(s.headerContent)}</div>` : ''}</div>`
         : `<div class="sheet-label"><div class="sheet-label-sub">${esc(day)} — ${combos.length} class${combos.length !== 1 ? 'es' : ''}</div></div>`;
-      dayBlocksHtml += `
-    <div class="sheet-slot">
-      ${dayHeaderHtml}
-      <div class="day-block">
-        <table class="tt">
-          <thead><tr><th>Period</th>${combos.map((c) => `<th>${esc(c.label)}</th>`).join('')}</tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>
-    </div>`;
+      slots.push(`<div class="sheet-slot">${dayHeaderHtml}<div class="day-block"><table class="tt"><thead><tr><th>Period</th>${combos.map((c) => `<th>${esc(c.label)}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div></div>`);
     } else {
       // Single sheet per page
       dayBlocksHtml += `
@@ -2867,6 +2876,10 @@ function buildDaywiseScheduleHtml(
     ? `<div class="custom-footer">${esc(s.footerContent)}</div>`
     : '';
   const bodyClass = s.sheetsPerPage > 1 ? ' class="sheets-multi"' : '';
+
+  if (s.sheetsPerPage > 1) {
+    dayBlocksHtml = groupSlotsIntoPages(slots, s.sheetsPerPage);
+  }
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${buildTimetableCss(isLandscape, s.sheetsPerPage)}
   .day-block { margin-bottom: 16px; page-break-inside: avoid; break-inside: avoid; }
