@@ -1744,6 +1744,7 @@ function buildCombinedClassTimetableHtml(
         }
       }
       rows += '</tr>';
+    }
 
     const customHeaderHtml = s.headerContent ? `<div class="custom-header">${esc(s.headerContent)}</div>` : '';
 
