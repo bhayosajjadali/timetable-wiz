@@ -42,7 +42,6 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import {
-  usePrintSettings,
   DEFAULT_PRINT_SETTINGS,
   type PrintSettings,
 } from '@/hooks/usePrintSettings';
@@ -1056,6 +1055,17 @@ function buildPeriodCountReportHtml(params: {
 
   const sorted = [...teacherData].sort((a, b) => b.totalForSelectedDays - a.totalForSelectedDays);
 
+  const daysLabel = filteredSelectedDays.length === activeDays.length
+    ? 'All Days'
+    : filteredSelectedDays.join(', ');
+
+  const customHeaderHtml = s.headerContent
+    ? `<div class="custom-header">${esc(s.headerContent)}</div>`
+    : '';
+  const customFooterHtml = s.footerContent
+    ? `<div class="custom-footer">${esc(s.footerContent)}</div>`
+    : '';
+
   let tablesHtml = '';
 
   if (tablesPerPage === 1) {
@@ -1118,10 +1128,21 @@ function buildPeriodCountReportHtml(params: {
           <td class="td-name">${esc(t.shortName)}</td>`;
         for (const day of filteredSelectedDays) {
           const cnt = td.dayCounts[day] || 0;
-          const bgClass = cnt === 0 ? 'zero' : '';
+          const bgClass = cnt === 0 ? 'zero' : cnt >= nonBreakPeriodsCount ? 'full' : '';
           tableRows += `<td class="td-num ${bgClass}">${cnt}</td>`;
         }
         tableRows += `<td class="td-total"><strong>${td.totalForSelectedDays}</strong></td>`;
+        if (detailMode === 'show-periods') {
+          let detailParts: string[] = [];
+          for (const day of filteredSelectedDays) {
+            const periods = td.dayPeriods[day] || [];
+            if (periods.length > 0) {
+              const pList = periods.map((p) => getPeriodLabel(p.period, timings)).join(',');
+              detailParts.push(`${day.slice(0, 3)}:${pList}`);
+            }
+          }
+          tableRows += `<td class="td-detail">${detailParts.join(' | ')}</td>`;
+        }
         tableRows += '</tr>';
       });
 
@@ -1140,23 +1161,17 @@ function buildPeriodCountReportHtml(params: {
       for (const day of filteredSelectedDays) {
         tablesHtml += `<th class="th-day">${esc(day.slice(0, 3))}</th>`;
       }
-      tablesHtml += `<th class="th-total">Total</th></tr></thead>
+      tablesHtml += `<th class="th-total">Total</th>`;
+      if (detailMode === 'show-periods') {
+        tablesHtml += '<th class="th-detail">Periods</th>';
+      }
+      tablesHtml += `</tr></thead>`;
             <tbody>${tableRows}</tbody>
           </table>
         </div>`;
     });
   }
 
-  const daysLabel = filteredSelectedDays.length === activeDays.length
-    ? 'All Days'
-    : filteredSelectedDays.join(', ');
-
-  const customHeaderHtml = s.headerContent
-    ? `<div class="custom-header">${esc(s.headerContent)}</div>`
-    : '';
-  const customFooterHtml = s.footerContent
-    ? `<div class="custom-footer">${esc(s.footerContent)}</div>`
-    : '';
   const bodyClass = tablesPerPage > 1 ? ' class="sheets-multi-pc"' : '';
 
   return `<!DOCTYPE html>
@@ -1166,25 +1181,34 @@ function buildPeriodCountReportHtml(params: {
 <style>
   @page {
     size: A4 ${isLandscape ? 'landscape' : 'portrait'};
-    margin: 12.7mm 12.7mm 12.7mm 12.7mm;
+    margin: 10mm 10mm 14mm 10mm;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; font-size: ${fontSize}; line-height: 1.3; color: #1D1D1F; background: #fff; }
+  body {
+    font-family: Georgia, 'Times New Roman', 'Noto Serif', serif;
+    font-size: ${fontSize};
+    line-height: 1.4;
+    color: #1D1D1F;
+    background: #fff;
+  }
   ${tablesPerPage > 1 ? `
   body.sheets-multi-pc {
     display: flex;
     flex-direction: column;
     gap: 0;
+    height: 100vh;
+    overflow: hidden;
   }
   body.sheets-multi-pc .sheet-slot {
-    flex: 1 1 0%;
+    flex: 0 0 calc(100vh / ${tablesPerPage});
+    max-height: calc(100vh / ${tablesPerPage});
     min-height: 0;
     page-break-inside: avoid;
     break-inside: avoid;
-    border: 1px solid #D1D1D6;
+    border: 1px solid #CBD5E0;
     border-radius: 4px;
     padding: 4px 6px;
-    margin-bottom: 4px;
+    margin-bottom: 3px;
     overflow: hidden;
     contain: layout paint;
   }
@@ -1199,48 +1223,240 @@ function buildPeriodCountReportHtml(params: {
   }
   ` : ''}
 
-  .report-header { text-align: center; padding-bottom: 6px; margin-bottom: 8px; border-bottom: 2.5px solid #1B2A4A; }
-  .report-header::after { content: ''; display: block; margin-top: 4px; height: 1px; background: linear-gradient(to right, transparent, #1B2A4A, transparent); }
-  .school-name { font-size: ${isLandscape ? '16px' : '14px'}; font-weight: 700; color: #1B2A4A; }
-  .report-title { font-size: ${isLandscape ? '12px' : '11px'}; font-weight: 600; color: #333; margin-top: 2px; }
-  .report-subtitle { font-size: ${headerFontSize}; color: #666; margin-top: 1px; }
-  .custom-header { text-align: center; font-size: ${headerFontSize}; color: #555; font-style: italic; margin-bottom: 4px; }
-  .custom-footer { text-align: center; font-size: ${headerFontSize}; color: #555; font-style: italic; margin-top: 4px; }
+  /* ── Header ── */
+  .report-header {
+    text-align: center;
+    padding-bottom: 6px;
+    margin-bottom: 8px;
+    border-bottom: 2.5px solid #2C5282;
+    position: relative;
+  }
+  .report-header::after {
+    content: '';
+    display: block;
+    margin-top: 3px;
+    height: 1.5px;
+    background: linear-gradient(to right, transparent, #2C5282, transparent);
+  }
+  .school-name {
+    font-size: ${isLandscape ? '17px' : '15px'};
+    font-weight: 700;
+    color: #1B2A4A;
+    letter-spacing: 0.8px;
+    font-family: Georgia, 'Times New Roman', serif;
+  }
+  .report-title {
+    font-size: ${isLandscape ? '12px' : '11px'};
+    font-weight: 600;
+    color: #2D3748;
+    margin-top: 2px;
+    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  }
+  .report-subtitle {
+    font-size: ${headerFontSize};
+    color: #718096;
+    margin-top: 1px;
+    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  }
+  .custom-header {
+    text-align: center;
+    font-size: ${headerFontSize};
+    color: #718096;
+    font-style: italic;
+    margin-bottom: 4px;
+    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  }
+  .custom-footer {
+    text-align: center;
+    font-size: ${headerFontSize};
+    color: #718096;
+    font-style: italic;
+    margin-top: 4px;
+    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  }
 
-  .pc-table { width: 100%; border-collapse: collapse; font-size: ${fontSize}; table-layout: fixed; }
-  .pc-table th, .pc-table td { border: 1px solid #D1D1D6; padding: ${cellPad}; text-align: center; vertical-align: middle; }
-  .th-sno { width: 22px; background: #1B2A4A; color: #fff; font-size: ${headerFontSize}; font-weight: 600; }
-  .th-name { background: #1B2A4A; color: #fff; font-size: ${headerFontSize}; font-weight: 600; text-align: left !important; width: auto; }
-  .th-short { background: #1B2A4A; color: #fff; font-size: ${headerFontSize}; font-weight: 600; width: 40px; }
-  .th-day { background: #1B2A4A; color: #fff; font-size: ${headerFontSize}; font-weight: 600; }
-  .th-total { background: #1B2A4A; color: white; font-size: ${headerFontSize}; font-weight: 700; width: 36px; }
-  .th-detail { background: #1B2A4A; color: #fff; font-size: ${headerFontSize}; font-weight: 600; text-align: left !important; }
+  /* ── Period Count Table ── */
+  .pc-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: ${fontSize};
+    table-layout: fixed;
+    border: 1.5px solid #2C5282;
+    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  }
+  .pc-table th, .pc-table td {
+    border: 0.5px solid #CBD5E0;
+    padding: ${cellPad};
+    text-align: center;
+    vertical-align: middle;
+  }
 
-  .td-sno { font-size: ${headerFontSize}; color: #86868B; background: #F1F3F5; }
-  .td-name { text-align: left !important; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .td-short { font-weight: 600; font-size: ${fontSize}; background: #F1F3F5; }
-  .td-num { font-weight: 600; font-size: ${fontSize}; }
-  .td-num.zero { background: #FFF3E0; color: #E65100; }
-  .td-num.full { background: #E8F5E9; color: #2E7D32; }
-  .td-total { background: #F0F5FF; font-size: ${fontSize}; }
-  .td-detail { text-align: left !important; font-size: ${headerFontSize}; color: #555; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: ${isLandscape ? '120px' : '80px'}; }
+  /* ── Table Headers ── */
+  .th-sno {
+    width: 22px;
+    background: linear-gradient(180deg, #4A5568 0%, #2D3748 100%);
+    color: #fff;
+    font-size: ${headerFontSize};
+    font-weight: 600;
+    text-shadow: 0 1px 1px rgba(0,0,0,0.1);
+  }
+  .th-name {
+    background: linear-gradient(180deg, #2C5282 0%, #1B2A4A 100%);
+    color: #fff;
+    font-size: ${headerFontSize};
+    font-weight: 600;
+    text-align: left !important;
+    width: auto;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .th-short {
+    background: linear-gradient(180deg, #2C5282 0%, #1B2A4A 100%);
+    color: #fff;
+    font-size: ${headerFontSize};
+    font-weight: 600;
+    width: 40px;
+  }
+  .th-day {
+    background: linear-gradient(180deg, #2C5282 0%, #1B2A4A 100%);
+    color: #fff;
+    font-size: ${headerFontSize};
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .th-total {
+    background: linear-gradient(180deg, #2C5282 0%, #1B2A4A 100%);
+    color: white;
+    font-size: ${headerFontSize};
+    font-weight: 700;
+    width: 36px;
+  }
+  .th-detail {
+    background: linear-gradient(180deg, #2C5282 0%, #1B2A4A 100%);
+    color: #fff;
+    font-size: ${headerFontSize};
+    font-weight: 600;
+    text-align: left !important;
+  }
+
+  /* ── Data cells ── */
+  .td-sno {
+    font-size: ${headerFontSize};
+    color: #A0AEC0;
+    background: #EDF2F7;
+  }
+  .td-name {
+    text-align: left !important;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: #2D3748;
+    letter-spacing: 0.2px;
+  }
+  .td-short {
+    font-weight: 600;
+    font-size: ${fontSize};
+    background: #EDF2F7;
+    color: #4A5568;
+  }
+  .td-num {
+    font-weight: 700;
+    font-size: ${fontSize};
+    letter-spacing: 0.3px;
+  }
+  .td-num.zero {
+    background: linear-gradient(135deg, #FFF5F5 0%, #FED7D7 100%);
+    color: #9B2C2C;
+    font-weight: 800;
+  }
+  .td-num.full {
+    background: linear-gradient(135deg, #F0FFF4 0%, #C6F6D5 100%);
+    color: #22543D;
+  }
+  .td-total {
+    background: linear-gradient(135deg, #EBF8FF 0%, #BEE3F8 100%);
+    font-size: ${fontSize};
+    font-weight: 800;
+    color: #1B2A4A;
+    border-left: 1.5px solid #2C5282 !important;
+  }
+  .td-detail {
+    text-align: left !important;
+    font-size: ${headerFontSize};
+    color: #718096;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: ${isLandscape ? '120px' : '80px'};
+    font-style: italic;
+  }
+
+  /* ── Alternating rows ── */
+  .pc-table tbody tr:nth-child(even) .td-name,
+  .pc-table tbody tr:nth-child(even) .td-num,
+  .pc-table tbody tr:nth-child(even) .td-detail { background: #F7FAFC; }
+  .pc-table tbody tr:nth-child(even) .td-sno,
+  .pc-table tbody tr:nth-child(even) .td-short { background: #E2E8F0; }
 
   .table-chunk { padding: 0 4px; }
   .chunk-title { font-size: ${headerFontSize}; font-weight: 600; text-align: center; margin-bottom: 3px; color: #1B2A4A; }
 
   .sheet-slot { width: 100%; page-break-inside: avoid; break-inside: avoid; }
-  .sheet-label-pc { text-align: center; padding: 2px 0 3px; margin-bottom: 3px; border-bottom: 1.5px solid #1B2A4A; font-size: ${headerFontSize}; font-weight: 600; color: #1B2A4A; }
+  .sheet-label-pc {
+    text-align: center;
+    padding: 2px 0 3px;
+    margin-bottom: 3px;
+    border-bottom: 2px solid #2C5282;
+    font-size: ${headerFontSize};
+    font-weight: 600;
+    color: #1B2A4A;
+    letter-spacing: 0.5px;
+    font-family: Georgia, 'Times New Roman', serif;
+  }
 
-  .summary-bar { display: flex; gap: 16px; justify-content: center; margin-top: 8px; flex-wrap: wrap; }
-  .summary-item { text-align: center; padding: 4px 12px; background: #F8F9FA; border-radius: 6px; border: 1px solid #E5E5EA; }
-  .summary-num { display: block; font-size: 14px; font-weight: 700; color: #1B2A4A; }
-  .summary-label { display: block; font-size: ${headerFontSize}; color: #86868B; }
+  /* ── Summary bar ── */
+  .summary-bar { display: flex; gap: 14px; justify-content: center; margin-top: 8px; flex-wrap: wrap; }
+  .summary-item {
+    text-align: center;
+    padding: 4px 12px;
+    background: linear-gradient(135deg, #F7FAFC 0%, #EDF2F7 100%);
+    border-radius: 6px;
+    border: 1px solid #CBD5E0;
+    border-top: 2px solid #2C5282;
+  }
+  .summary-num {
+    display: block;
+    font-size: 14px;
+    font-weight: 700;
+    color: #1B2A4A;
+    font-family: Georgia, serif;
+  }
+  .summary-label {
+    display: block;
+    font-size: ${headerFontSize};
+    color: #718096;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-family: 'Segoe UI', sans-serif;
+  }
 
-  .report-footer { margin-top: 10px; padding-top: 6px; border-top: 1px solid #E5E5EA; display: flex; justify-content: space-between; font-size: ${headerFontSize}; color: #86868B; }
-  .watermark { font-size: 7px; color: #bbb; font-style: italic; }
+  .report-footer {
+    margin-top: 10px;
+    padding-top: 6px;
+    border-top: 1.5px solid #CBD5E0;
+    display: flex;
+    justify-content: space-between;
+    font-size: ${headerFontSize};
+    color: #A0AEC0;
+    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  }
+  .watermark { font-size: 7px; color: #CBD5E0; font-style: italic; }
 
   @media print {
     body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .pc-table { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   }
 </style>
 </head>
@@ -1831,22 +2047,54 @@ function esc(str: string): string {
 
 /* ---------- Shared professional CSS for timetable grid reports ---------- */
 
+/* Print-safe pastel palette for subject cells */
+const SUBJECT_COLORS: { bg: string; fg: string; border: string }[] = [
+  { bg: '#EDE7F6', fg: '#4527A0', border: '#CE93D8' },  // Lavender
+  { bg: '#E3F2FD', fg: '#0D47A1', border: '#90CAF9' },  // Sky Blue
+  { bg: '#E8F5E9', fg: '#1B5E20', border: '#A5D6A7' },  // Mint Green
+  { bg: '#FFF3E0', fg: '#BF360C', border: '#FFCC80' },  // Peach
+  { bg: '#FCE4EC', fg: '#880E4F', border: '#F48FB1' },  // Rose
+  { bg: '#E0F2F1', fg: '#004D40', border: '#80CBC4' },  // Teal
+  { bg: '#FFF8E1', fg: '#F57F17', border: '#FFE082' },  // Amber
+  { bg: '#E8EAF6', fg: '#1A237E', border: '#9FA8DA' },  // Indigo
+  { bg: '#FBE9E7', fg: '#BF360C', border: '#FFAB91' },  // Coral
+  { bg: '#F1F8E9', fg: '#33691E', border: '#AED581' },  // Sage
+  { bg: '#E0F7FA', fg: '#006064', border: '#80DEEA' },  // Cyan
+  { bg: '#FFF9C4', fg: '#827717', border: '#FFF176' },  // Lime
+  { bg: '#F3E5F5', fg: '#6A1B9A', border: '#CE93D8' },  // Purple
+  { bg: '#E8EAF6', fg: '#283593', border: '#9FA8DA' },  // Deep Indigo
+  { bg: '#EFEBE9', fg: '#3E2723', border: '#BCAAA4' },  // Warm Gray
+  { bg: '#ECEFF1', fg: '#263238', border: '#B0BEC5' },  // Cool Gray
+];
+
+function getSubjectPrintColor(subjectId: string): { bg: string; fg: string; border: string } {
+  let hash = 0;
+  for (let i = 0; i < subjectId.length; i++) {
+    hash = ((hash << 5) - hash) + subjectId.charCodeAt(i);
+    hash |= 0;
+  }
+  return SUBJECT_COLORS[Math.abs(hash) % SUBJECT_COLORS.length];
+}
+
 function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string {
   const nUpCss = sheetsPerPage > 1 ? `
   body.sheets-multi {
     display: flex;
     flex-direction: column;
     gap: 0;
+    height: 100vh;
+    overflow: hidden;
   }
   body.sheets-multi .sheet-slot {
-    flex: 1 1 0%;
+    flex: 0 0 calc(100vh / ${sheetsPerPage});
+    max-height: calc(100vh / ${sheetsPerPage});
     min-height: 0;
     page-break-inside: avoid;
     break-inside: avoid;
     border: 1px solid #D1D1D6;
     border-radius: 4px;
     padding: 6px 8px;
-    margin-bottom: 4px;
+    margin-bottom: 3px;
     overflow: hidden;
     contain: layout paint;
   }
@@ -1863,49 +2111,106 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
   return `
   @page {
     size: A4 ${isLandscape ? 'landscape' : 'portrait'};
-    margin: 12.7mm 12.7mm 12.7mm 12.7mm;
+    margin: 10mm 10mm 14mm 10mm;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  /* ── Fonts ── */
   body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
-    font-size: 9px;
+    font-family: Georgia, 'Times New Roman', 'Noto Serif', serif;
+    font-size: 9.5px;
+    line-height: 1.4;
     color: #1D1D1F;
     background: #fff;
   }
+
   ${nUpCss}
 
-  /* ── Page header (full — first sheet on each page) ── */
+  /* ── Compact headers in multi-sheet mode ── */
+  body.sheets-multi .page-header {
+    padding-bottom: 2px;
+    margin-bottom: 3px;
+  }
+  body.sheets-multi .page-header .header-bar {
+    height: 1.5px;
+    margin-bottom: 2px;
+  }
+  body.sheets-multi .page-header .school-name { font-size: 9px; letter-spacing: 0.3px; }
+  body.sheets-multi .page-header .report-title { font-size: 7px; margin-top: 0; }
+  body.sheets-multi .page-header .report-sub { font-size: 6px; margin-top: 0; }
+  body.sheets-multi .custom-header { font-size: 6px; margin-top: 1px; }
+  body.sheets-multi table.tt { font-size: 6.5px; }
+  body.sheets-multi table.tt th { font-size: 6px; letter-spacing: 0.4px; }
+  body.sheets-multi table.tt td { padding: 1px 1px; }
+  body.sheets-multi .tp { width: 44px; min-width: 44px; font-size: 6px; }
+  body.sheets-multi .pl { font-size: 6px; }
+  body.sheets-multi .tt-time { font-size: 5px; }
+  body.sheets-multi .tf b { font-size: 6.5px; }
+  body.sheets-multi .tn { font-size: 5px; }
+  body.sheets-multi .sheet-label { padding: 1px 0 2px; margin-bottom: 2px; }
+  body.sheets-multi .sheet-label-title { font-size: 7px; }
+  body.sheets-multi .sheet-label-sub { font-size: 5.5px; }
+
+  /* ── Page header ── */
   .page-header {
     text-align: center;
-    padding-bottom: 8px;
-    margin-bottom: 10px;
+    padding-bottom: 6px;
+    margin-bottom: 8px;
   }
   .page-header .header-bar {
     width: 100%;
     height: 3px;
-    background: linear-gradient(to right, transparent, #1B2A4A, transparent);
-    margin-bottom: 8px;
+    background: linear-gradient(to right, transparent 2%, #1B2A4A 20%, #2C5282 50%, #1B2A4A 80%, transparent 98%);
+    border-radius: 2px;
+    margin-bottom: 6px;
   }
-  .page-header .school-name { font-size: 16px; font-weight: 700; color: #1B2A4A; letter-spacing: -0.3px; }
-  .page-header .report-title { font-size: 12px; font-weight: 600; color: #333; margin-top: 3px; }
-  .page-header .report-sub { font-size: 10px; color: #555; margin-top: 2px; }
-  .custom-header { text-align: center; font-size: 9px; color: #666; font-style: italic; margin-top: 4px; }
+  .page-header .school-name {
+    font-size: 17px;
+    font-weight: 700;
+    color: #1B2A4A;
+    letter-spacing: 0.8px;
+    font-family: Georgia, 'Times New Roman', serif;
+  }
+  .page-header .report-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: #2D3748;
+    margin-top: 2px;
+    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  }
+  .page-header .report-sub {
+    font-size: 9px;
+    color: #718096;
+    margin-top: 1px;
+    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  }
+  .custom-header {
+    text-align: center;
+    font-size: 8px;
+    color: #718096;
+    font-style: italic;
+    margin-top: 3px;
+    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  }
 
-  /* ── Compact sheet label (non-first sheets on a page) ── */
+  /* ── Compact sheet label ── */
   .sheet-label {
     text-align: center;
     padding: 2px 0 4px;
     margin-bottom: 4px;
-    border-bottom: 1.5px solid #1B2A4A;
+    border-bottom: 2px solid #2C5282;
   }
   .sheet-label-title {
     font-size: 10px;
-    font-weight: 600;
+    font-weight: 700;
     color: #1B2A4A;
+    letter-spacing: 0.5px;
+    font-family: Georgia, 'Times New Roman', serif;
   }
   .sheet-label-sub {
-    font-size: 8px;
-    color: #555;
+    font-size: 7.5px;
+    color: #718096;
+    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   }
 
   /* ── Footer ── */
@@ -1914,64 +2219,174 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
     bottom: 0; left: 0; right: 0;
     display: table;
     width: 100%;
-    border-top: 1px solid #D1D1D6;
-    padding-top: 4px;
-    font-size: 7px;
-    color: #86868B;
+    border-top: 1.5px solid #CBD5E0;
+    padding-top: 3px;
+    font-size: 6.5px;
+    color: #A0AEC0;
+    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   }
-  .page-footer .f-left   { display: table-cell; text-align: left;   width: 33%; }
+  .page-footer .f-left   { display: table-cell; text-align: left;   width: 33%; padding: 0 6px; }
   .page-footer .f-center { display: table-cell; text-align: center; width: 34%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .page-footer .f-right  { display: table-cell; text-align: right;  width: 33%; }
-  .watermark { color: #bbb; font-style: italic; }
-  .custom-footer { text-align: center; font-size: 8px; color: #666; font-style: italic; margin-top: 6px; }
+  .page-footer .f-right  { display: table-cell; text-align: right;  width: 33%; padding: 0 6px; }
+  .watermark { color: #CBD5E0; font-style: italic; letter-spacing: 0.3px; }
+  .custom-footer {
+    text-align: center;
+    font-size: 7.5px;
+    color: #718096;
+    font-style: italic;
+    margin-top: 6px;
+    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  }
 
   /* ── Timetable grid ── */
-  table.tt { width: 100%; border-collapse: collapse; }
-  table.tt th, table.tt td { border: 1px solid #D1D1D6; padding: 3px 2px; text-align: center; vertical-align: middle; }
-  table.tt th { background: #1B2A4A; font-size: 8px; font-weight: 700; color: #fff; }
-  .tp { background: #F1F3F5; font-size: 8px; width: 68px; min-width: 68px; }
-  .pl { display: block; font-weight: 700; color: #1D1D1F; }
-  .tt-time { display: block; font-size: 6.5px; color: #86868B; margin-top: 1px; }
-  .tf { font-size: 9px; }
-  .tn { display: block; font-size: 7px; color: #555; margin-top: 1px; }
-  .tb { font-size: 9px; color: #E65100; background: linear-gradient(135deg, #FFF8E1, #FFECB3) !important; font-style: italic; }
-  .te { color: #C7C7CC; }
-  .brk td { background: linear-gradient(135deg, #FFF8E1, #FFECB3) !important; }
+  table.tt {
+    width: 100%;
+    border-collapse: collapse;
+    border: 1.5px solid #2C5282;
+    border-radius: 3px;
+    overflow: hidden;
+    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  }
+  table.tt th, table.tt td {
+    border: 0.5px solid #CBD5E0;
+    padding: 3px 2px;
+    text-align: center;
+    vertical-align: middle;
+  }
 
-  /* ── Alternating rows via nth-child ── */
+  /* ── Table header row ── */
+  table.tt th {
+    background: linear-gradient(180deg, #2C5282 0%, #1B2A4A 100%);
+    font-size: 7.5px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    padding: 4px 3px;
+    text-shadow: 0 1px 1px rgba(0,0,0,0.15);
+  }
+  table.tt th:first-child {
+    background: linear-gradient(180deg, #4A5568 0%, #2D3748 100%);
+  }
+
+  /* ── Period label column ── */
+  .tp {
+    background: #EDF2F7 !important;
+    font-size: 7.5px;
+    width: 66px;
+    min-width: 66px;
+    border-right: 1.5px solid #A0AEC0 !important;
+  }
+  .pl {
+    display: block;
+    font-weight: 700;
+    color: #2D3748;
+    font-size: 7.5px;
+  }
+  .tt-time {
+    display: block;
+    font-size: 5.5px;
+    color: #A0AEC0;
+    margin-top: 0.5px;
+    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  }
+
+  /* ── Subject cells (filled) ── */
+  .tf {
+    font-size: 8.5px;
+    border-radius: 0;
+  }
+  .tf b {
+    font-weight: 700;
+    letter-spacing: 0.2px;
+  }
+  .tn {
+    display: block;
+    font-size: 6px;
+    color: #4A5568;
+    margin-top: 0.5px;
+    font-weight: 400;
+    font-style: italic;
+    opacity: 0.85;
+  }
+
+  /* ── Break rows ── */
+  .tb {
+    font-size: 8px;
+    color: #9C4221;
+    background: linear-gradient(135deg, #FEFCBF 0%, #FAF089 50%, #F6E05E 100%) !important;
+    font-style: italic;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-shadow: 0 0.5px 0 rgba(0,0,0,0.04);
+  }
+  .brk td {
+    background: linear-gradient(135deg, #FEFCBF 0%, #FAF089 50%, #F6E05E 100%) !important;
+    border-color: #ECC94B !important;
+  }
+
+  /* ── Empty cells ── */
+  .te { color: #E2E8F0; }
+
+  /* ── Alternating row striping ── */
   table.tt tbody tr:nth-child(even) td.te,
-  table.tt tbody tr:nth-child(even) td.tf,
-  table.tt tbody tr:nth-child(even) td.tbrk { background: #F8F9FA; }
-  table.tt tbody tr:nth-child(even) td.tp { background: #E9ECEF; }
+  table.tt tbody tr:nth-child(even) td.tf { background: #F7FAFC; }
+  table.tt tbody tr:nth-child(even) td.tp { background: #E2E8F0 !important; }
 
   /* ── Summary stats ── */
-  .sr { display: flex; gap: 12px; margin-bottom: 12px; justify-content: center; }
-  .si { text-align: center; padding: 8px 18px; background: #F8F9FA; border-radius: 8px; border: 1px solid #DEE2E6; }
-  .sn2 { display: block; font-size: 20px; font-weight: 700; color: #1B2A4A; }
-  .sl { display: block; font-size: 8px; color: #86868B; margin-top: 2px; }
+  .sr { display: flex; gap: 10px; margin-bottom: 10px; justify-content: center; }
+  .si {
+    text-align: center;
+    padding: 6px 16px;
+    background: linear-gradient(135deg, #F7FAFC 0%, #EDF2F7 100%);
+    border-radius: 6px;
+    border: 1px solid #CBD5E0;
+    border-top: 2.5px solid #2C5282;
+  }
+  .sn2 { display: block; font-size: 18px; font-weight: 700; color: #1B2A4A; font-family: Georgia, serif; }
+  .sl { display: block; font-size: 7px; color: #718096; margin-top: 1px; text-transform: uppercase; letter-spacing: 0.5px; font-family: 'Segoe UI', sans-serif; }
 
-  /* ── Cover page for combined reports ── */
+  /* ── Cover page ── */
   .cover-page { text-align: center; padding: 40px 20px; page-break-after: always; break-after: page; }
-  .cover-page .cover-school { font-size: 24px; font-weight: 700; color: #1B2A4A; margin-bottom: 8px; }
-  .cover-page .cover-title { font-size: 18px; font-weight: 600; color: #333; margin-bottom: 6px; }
-  .cover-page .cover-date { font-size: 12px; color: #666; margin-bottom: 20px; }
+  .cover-page .cover-school { font-size: 26px; font-weight: 700; color: #1B2A4A; margin-bottom: 8px; letter-spacing: 1px; }
+  .cover-page .cover-title { font-size: 16px; font-weight: 600; color: #4A5568; margin-bottom: 6px; }
+  .cover-page .cover-date { font-size: 11px; color: #A0AEC0; margin-bottom: 20px; }
   .cover-page .cover-list { text-align: left; display: inline-block; max-width: 400px; }
-  .cover-page .cover-item { padding: 4px 0; font-size: 11px; color: #555; border-bottom: 1px solid #F0F0F0; }
+  .cover-page .cover-item { padding: 4px 0; font-size: 10px; color: #718096; border-bottom: 1px solid #EDF2F7; }
 
   /* ── Day blocks ── */
-  .db { margin-bottom: 8px; border: 1px solid #E5E5EA; border-radius: 6px; overflow: hidden; }
-  .dh { background: #1B2A4A; padding: 5px 8px; font-weight: 700; font-size: 10px; color: #fff; border-bottom: 1px solid #1B2A4A; }
-  .fc { font-weight: 400; font-size: 8px; color: #fff; margin-left: 5px; }
+  .db { margin-bottom: 8px; border: 1px solid #CBD5E0; border-radius: 6px; overflow: hidden; border-left: 3px solid #2C5282; }
+  .dh {
+    background: linear-gradient(135deg, #2C5282 0%, #1B2A4A 100%);
+    padding: 5px 8px;
+    font-weight: 700;
+    font-size: 9.5px;
+    color: #fff;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .fc { font-weight: 400; font-size: 7px; color: #CBD5E0; margin-left: 5px; text-transform: none; letter-spacing: 0; }
   .di { display: flex; flex-wrap: wrap; gap: 5px; padding: 6px 8px; }
-  .fi { padding: 3px 8px; background: #E8F5E9; border: 1px solid #A5D6A7; border-radius: 4px; font-size: 8px; font-weight: 600; color: #2E7D32; }
+  .fi {
+    padding: 3px 8px;
+    background: linear-gradient(135deg, #F0FFF4 0%, #C6F6D5 100%);
+    border: 1px solid #9AE6B4;
+    border-radius: 10px;
+    font-size: 7.5px;
+    font-weight: 600;
+    color: #22543D;
+    letter-spacing: 0.3px;
+  }
 
-  /* ── Individual timetable page in combined report ── */
+  /* ── Individual timetable page ── */
   .timetable-page { padding-bottom: 12px; }
   .timetable-page:last-child { padding-bottom: 0; }
 
+  /* ── Print optimization ── */
   @media print {
     body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .page-footer { position: fixed; bottom: 0; }
+    table.tt { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   }`;
 }
 
@@ -2023,7 +2438,8 @@ function buildCombinedClassTimetableHtml(
         if (entry) {
           const subj = getS(entry.subjectId);
           const tchr = getT(entry.teacherId);
-          rows += `<td class="tf"><b>${esc(subj?.shortName || '?')}</b><span class="tn">${esc(tchr?.name || '?')}</span></td>`;
+          const sc = getSubjectPrintColor(entry.subjectId);
+          rows += `<td class="tf" style="background:${sc.bg};color:${sc.fg};border-left:2px solid ${sc.border};"><b>${esc(subj?.shortName || '?')}</b><span class="tn" style="color:${sc.fg};opacity:0.7;">${esc(tchr?.name || '?')}</span></td>`;
         } else if (showEmpty) {
           rows += '<td class="te">\u2014</td>';
         } else {
@@ -2127,7 +2543,8 @@ function buildCombinedTeacherScheduleHtml(
           const subj = getS(entry.subjectId);
           const cls = getC(entry.classId);
           const sec = getSec(entry.sectionId);
-          rows += `<td class="tf"><b>${esc(subj?.shortName || '?')}</b><span class="tn">${esc(cls?.name || '')}-${esc(sec?.name || '')}</span></td>`;
+          const sc = getSubjectPrintColor(entry.subjectId);
+          rows += `<td class="tf" style="background:${sc.bg};color:${sc.fg};border-left:2px solid ${sc.border};"><b>${esc(subj?.shortName || '?')}</b><span class="tn" style="color:${sc.fg};opacity:0.7;">${esc(cls?.name || '')}-${esc(sec?.name || '')}</span></td>`;
         } else if (showEmpty) {
           rows += '<td class="te">\u2014</td>';
         } else {
@@ -2219,7 +2636,8 @@ function buildClassTimetableHtml(
       if (entry) {
         const subj = getS(entry.subjectId);
         const tchr = getT(entry.teacherId);
-        rows += `<td class="tf"><b>${esc(subj?.shortName || '?')}</b><span class="tn">${esc(tchr?.name || '?')}</span></td>`;
+        const sc = getSubjectPrintColor(entry.subjectId);
+        rows += `<td class="tf" style="background:${sc.bg};color:${sc.fg};border-left:2px solid ${sc.border};"><b>${esc(subj?.shortName || '?')}</b><span class="tn" style="color:${sc.fg};opacity:0.7;">${esc(tchr?.name || '?')}</span></td>`;
       } else if (showEmpty) {
         rows += '<td class="te">\u2014</td>';
       } else {
@@ -2296,7 +2714,8 @@ function buildTeacherScheduleHtml(
         const subj = getS(entry.subjectId);
         const cls = getC(entry.classId);
         const sec = getSec(entry.sectionId);
-        rows += `<td class="tf"><b>${esc(subj?.shortName || '?')}</b><span class="tn">${esc(cls?.name || '')}-${esc(sec?.name || '')}</span></td>`;
+        const sc = getSubjectPrintColor(entry.subjectId);
+        rows += `<td class="tf" style="background:${sc.bg};color:${sc.fg};border-left:2px solid ${sc.border};"><b>${esc(subj?.shortName || '?')}</b><span class="tn" style="color:${sc.fg};opacity:0.7;">${esc(cls?.name || '')}-${esc(sec?.name || '')}</span></td>`;
       } else if (showEmpty) {
         rows += '<td class="te">\u2014</td>';
       } else {
@@ -2383,7 +2802,8 @@ function buildDaywiseScheduleHtml(
         if (entry) {
           const subj = getS(entry.subjectId);
           const tchr = getT(entry.teacherId);
-          rows += `<td class="tf"><b>${esc(subj?.shortName || '?')}</b><span class="tn">${esc(tchr?.name || '?')}</span></td>`;
+          const sc = getSubjectPrintColor(entry.subjectId);
+          rows += `<td class="tf" style="background:${sc.bg};color:${sc.fg};border-left:2px solid ${sc.border};"><b>${esc(subj?.shortName || '?')}</b><span class="tn" style="color:${sc.fg};opacity:0.7;">${esc(tchr?.name || '?')}</span></td>`;
         } else if (showEmpty) {
           rows += '<td class="te">\u2014</td>';
         } else {
