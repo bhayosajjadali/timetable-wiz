@@ -681,13 +681,18 @@ export const useTimetableStore = create<TimetableStore>()(
 
         // Sections: exported as [{name: "A", class: "Class 10"}]
         // Note: the export uses "class" (name string) not "classId" (UUID)
+        // Some exports (native ID-based) only have {id, name} — no classId or class field.
+        // In that case, resolve classId by looking up which class.sectionIds contains this section's id.
         const sections: Section[] = Array.isArray(raw.sections)
           ? (raw.sections as unknown[]).map((s) => {
               const obj = s as Record<string, unknown>;
               const sectionName = String(obj.name || '');
+              const sectionId = String(obj.id || generateId());
 
-              // Resolve classId from the "class" name string
+              // Priority 1: explicit classId field
               let classId = String(obj.classId || '');
+
+              // Priority 2: resolve from "class" name string
               if (!classId && obj.class) {
                 const className = String(obj.class).trim();
                 const match = classes.find(
@@ -696,8 +701,24 @@ export const useTimetableStore = create<TimetableStore>()(
                 classId = match?.id || '';
               }
 
+              // Priority 3: reverse-lookup via class.sectionIds (native backup format)
+              if (!classId && Array.isArray(raw.classes)) {
+                const ownerClass = (raw.classes as Record<string, unknown>[]).find(
+                  (c) =>
+                    Array.isArray(c.sectionIds) &&
+                    (c.sectionIds as string[]).includes(sectionId)
+                );
+                if (ownerClass) {
+                  // Find the matching constructed class object by name
+                  const matched = classes.find(
+                    (c) => c.name === String(ownerClass.name || '')
+                  );
+                  classId = matched?.id || String(ownerClass.id || '');
+                }
+              }
+
               return {
-                id: String(obj.id || generateId()),
+                id: sectionId,
                 name: sectionName,
                 classId,
               };
