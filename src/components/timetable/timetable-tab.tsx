@@ -260,9 +260,9 @@ function TimetableGrid({ classId, sectionId }: { classId: string; sectionId: str
           ) : null}
 
           <div className="overflow-x-auto">
-            <div className="min-w-[600px]">
+            <div style={{ minWidth: `${100 + activeDays.length * 80}px` }}>
               {/* Header row */}
-              <div className="grid gap-px bg-border rounded-lg overflow-hidden" style={{ gridTemplateColumns: '100px repeat(' + activeDays.length + ', 1fr)' }}>
+              <div className="grid gap-px bg-border rounded-lg overflow-hidden" style={{ gridTemplateColumns: `100px repeat(${activeDays.length}, minmax(80px, 1fr))` }}>
                 <div className="bg-muted p-2 text-center text-xs font-medium text-muted-foreground flex items-center justify-center">
                   Day / Period
                 </div>
@@ -287,22 +287,20 @@ function TimetableGrid({ classId, sectionId }: { classId: string; sectionId: str
                         <span className="text-xs font-medium">{getPeriodLabel(period, timings)}</span>
                         <span className="text-[10px] text-muted-foreground">{time}</span>
                       </div>
-                      {activeDays.map((day) => {
+                      {isBreak ? (
+                        <div
+                          className="bg-amber-50 dark:bg-amber-950/10 p-2 flex items-center justify-center gap-1.5 text-amber-600"
+                          style={{ gridColumn: `span ${activeDays.length}` }}
+                        >
+                          <Coffee className="h-3 w-3 text-amber-400" />
+                          <span className="text-xs font-medium text-amber-500">Break</span>
+                        </div>
+                      ) : (
+                        activeDays.map((day) => {
                         const entry = getEntry(day, period);
                         const teacher = entry ? getTeacher(entry.teacherId) : null;
                         const subject = entry ? getSubject(entry.subjectId) : null;
                         const colors = entry ? getSubjectColor(entry.subjectId) : null;
-
-                        if (isBreak) {
-                          return (
-                            <div
-                              key={`${day}-${period}`}
-                              className="bg-amber-50 dark:bg-amber-950/10 p-2 flex items-center justify-center"
-                            >
-                              <Coffee className="h-3 w-3 text-amber-400" />
-                            </div>
-                          );
-                        }
 
                         return (
                           <div
@@ -341,7 +339,8 @@ function TimetableGrid({ classId, sectionId }: { classId: string; sectionId: str
                             )}
                           </div>
                         );
-                      })}
+                      })
+                      )}
                     </Fragment>
                   );
                 })}

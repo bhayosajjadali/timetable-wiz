@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useRef, useCallback } from 'react';
+import { useState, useMemo, useRef, useCallback, Fragment } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -30,7 +30,6 @@ import { useTimetableStore } from '@/lib/store';
 import { getSubjectColor, getPeriodTime, isBreakPeriod, getPeriodLabel } from '@/lib/timetable-utils';
 import { useToast } from '@/hooks/use-toast';
 import {
-  FileText,
   Printer,
   Clock,
   Coffee,
@@ -223,63 +222,62 @@ export function ReportsTab() {
 
   return (
     <div className="space-y-4">
-      {/* ── Global toolbar ── */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-2 mr-auto">
-          <FileText className="h-5 w-5 text-muted-foreground" />
-          <span className="font-semibold text-sm">Reports</span>
-        </div>
-
-        <label className="flex items-center gap-1.5 cursor-pointer rounded-md border px-2.5 py-1 hover:bg-muted/50 transition-colors">
-          <Checkbox checked={showBreaks} onCheckedChange={(v) => setShowBreaks(!!v)} className="h-3.5 w-3.5" />
-          <span className="text-xs">Breaks</span>
-        </label>
-        <label className="flex items-center gap-1.5 cursor-pointer rounded-md border px-2.5 py-1 hover:bg-muted/50 transition-colors">
-          <Checkbox checked={showEmpty} onCheckedChange={(v) => setShowEmpty(!!v)} className="h-3.5 w-3.5" />
-          <span className="text-xs">Empty</span>
-        </label>
-
-        <div className="relative w-48">
-          <Input
-            placeholder="Search..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="h-8 text-xs pl-7"
-          />
-          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
-        </div>
-
-        <PrintSettingsDialog
-          settings={printSettings}
-          onUpdate={updateSettings}
-          onReset={resetSettings}
-        >
-          <Button variant="outline" size="sm" className="h-8">
-            <Settings2 className="h-3.5 w-3.5" />
-          </Button>
-        </PrintSettingsDialog>
-      </div>
 
       {/* ── Tabs ── */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="flex-wrap">
-          <TabsTrigger value="class-timetable" className="gap-1.5">
-            <GraduationCap className="h-3.5 w-3.5" />
-            Class Timetable
-          </TabsTrigger>
-          <TabsTrigger value="teacher-schedule" className="gap-1.5">
-            <UserCheck className="h-3.5 w-3.5" />
-            Teacher Schedule
-          </TabsTrigger>
-          <TabsTrigger value="daywise" className="gap-1.5">
-            <CalendarDays className="h-3.5 w-3.5" />
-            Daywise Schedule
-          </TabsTrigger>
-          <TabsTrigger value="teacher-period-count" className="gap-1.5">
-            <BarChart3 className="h-3.5 w-3.5" />
-            Period Count
-          </TabsTrigger>
-        </TabsList>
+        <div className="flex flex-wrap items-center gap-2">
+          <TabsList className="flex-wrap h-auto gap-1">
+            <TabsTrigger value="class-timetable" className="gap-1.5">
+              <GraduationCap className="h-3.5 w-3.5" />
+              Class Timetable
+            </TabsTrigger>
+            <TabsTrigger value="teacher-schedule" className="gap-1.5">
+              <UserCheck className="h-3.5 w-3.5" />
+              Teacher Schedule
+            </TabsTrigger>
+            <TabsTrigger value="teacher-period-count" className="gap-1.5">
+              <BarChart3 className="h-3.5 w-3.5" />
+              Period Count
+            </TabsTrigger>
+            <TabsTrigger value="daywise" className="gap-1.5">
+              <CalendarDays className="h-3.5 w-3.5" />
+              Daywise
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Global filters — visible on timetable tabs */}
+          {(activeTab === 'class-timetable' || activeTab === 'teacher-schedule' || activeTab === 'daywise') && (
+            <div className="flex items-center gap-2 ml-auto flex-wrap">
+              <label className="flex items-center gap-1.5 cursor-pointer rounded-md border px-2.5 py-1 hover:bg-muted/50 transition-colors">
+                <Checkbox checked={showBreaks} onCheckedChange={(v) => setShowBreaks(!!v)} className="h-3.5 w-3.5" />
+                <span className="text-xs">Breaks</span>
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer rounded-md border px-2.5 py-1 hover:bg-muted/50 transition-colors">
+                <Checkbox checked={showEmpty} onCheckedChange={(v) => setShowEmpty(!!v)} className="h-3.5 w-3.5" />
+                <span className="text-xs">Empty</span>
+              </label>
+              <div className="relative w-40">
+                <Input
+                  placeholder="Search..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="h-8 text-xs pl-7"
+                />
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+              </div>
+              <PrintSettingsDialog
+                settings={printSettings}
+                onUpdate={updateSettings}
+                onReset={resetSettings}
+              >
+                <Button variant="outline" size="sm" className="h-8 gap-1.5">
+                  <Settings2 className="h-3.5 w-3.5" />
+                  <span className="text-xs hidden sm:inline">Print</span>
+                </Button>
+              </PrintSettingsDialog>
+            </div>
+          )}
+        </div>
 
         {/* ── Class Timetable Tab ── */}
         <TabsContent value="class-timetable">
@@ -293,16 +291,18 @@ export function ReportsTab() {
                   </CardTitle>
                   <CardDescription>Select class + section combos to generate timetables</CardDescription>
                 </div>
-                <CheckDropdown
-                  label="Classes"
-                  icon={GraduationCap}
-                  options={classSectionOpts}
-                  selected={selectedClassSectionKeys}
-                  onToggle={toggleItem(setSelectedClassSectionKeys)}
-                  onSelectAll={selectAllItems(setSelectedClassSectionKeys, allClassSectionKeys)}
-                  allLabel="All Classes"
-                  searchable
-                />
+                <div className="flex items-center gap-2 flex-wrap">
+                  <CheckDropdown
+                    label="Classes"
+                    icon={GraduationCap}
+                    options={classSectionOpts}
+                    selected={selectedClassSectionKeys}
+                    onToggle={toggleItem(setSelectedClassSectionKeys)}
+                    onSelectAll={selectAllItems(setSelectedClassSectionKeys, allClassSectionKeys)}
+                    allLabel="All Classes"
+                    searchable
+                  />
+                </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -1229,18 +1229,35 @@ function ClassTimetableReport({ classId, sectionId, showBreaks, showEmpty }: { c
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">
-          <div className="min-w-[600px]">
-            <div className="grid gap-px bg-border rounded-lg overflow-hidden" style={{ gridTemplateColumns: '100px repeat(' + activeDays.length + ', 1fr)' }}>
+          <div style={{ minWidth: `${100 + activeDays.length * 80}px` }}>
+            <div className="grid gap-px bg-border rounded-lg overflow-hidden" style={{ gridTemplateColumns: `100px repeat(${activeDays.length}, minmax(80px, 1fr))` }}>
               <div className="bg-muted p-2 text-center text-xs font-medium text-muted-foreground flex items-center justify-center">Day / Period</div>
               {activeDays.map((day) => (
-                <div key={day} className="bg-muted p-2 text-center text-xs font-medium text-muted-foreground">{day}</div>
+                <div key={day} className="bg-muted p-2 text-center text-xs font-medium text-muted-foreground whitespace-nowrap">{day}</div>
               ))}
               {visiblePeriods.map((period) => {
                 const isBreak = isBreakPeriod(period, timings);
                 const time = getPeriodTime(period, timings);
+                if (isBreak) {
+                  return (
+                    <Fragment key={`brk-${period}`}>
+                      <div className="bg-amber-100 dark:bg-amber-900/20 p-2 flex flex-col items-center justify-center gap-0.5">
+                        <span className="text-xs font-medium">{getPeriodLabel(period, timings)}</span>
+                        <span className="text-[10px] text-muted-foreground">{time}</span>
+                      </div>
+                      <div
+                        className="bg-amber-50 dark:bg-amber-950/10 p-2 flex items-center justify-center gap-1.5"
+                        style={{ gridColumn: `span ${activeDays.length}` }}
+                      >
+                        <Coffee className="h-3 w-3 text-amber-400" />
+                        <span className="text-xs font-medium text-amber-500">Break</span>
+                      </div>
+                    </Fragment>
+                  );
+                }
                 return (
                   <div key={`row-${period}`}>
-                    <div className={`bg-muted/50 p-2 flex flex-col items-center justify-center gap-0.5 ${isBreak ? 'bg-amber-100 dark:bg-amber-900/20' : ''}`}>
+                    <div className="bg-muted/50 p-2 flex flex-col items-center justify-center gap-0.5">
                       <span className="text-xs font-medium">{getPeriodLabel(period, timings)}</span>
                       <span className="text-[10px] text-muted-foreground">{time}</span>
                     </div>
@@ -1249,7 +1266,6 @@ function ClassTimetableReport({ classId, sectionId, showBreaks, showEmpty }: { c
                       const teacher = entry ? teachers.find((t) => t.id === entry.teacherId) : null;
                       const subject = entry ? subjects.find((s) => s.id === entry.subjectId) : null;
                       const colors = entry ? getSubjectColor(entry.subjectId) : null;
-                      if (isBreak) return <div key={`${day}-${period}`} className="bg-amber-50 dark:bg-amber-950/10 p-2 flex items-center justify-center"><Coffee className="h-3 w-3 text-amber-400" /></div>;
                       if (!entry && !showEmpty) return <div key={`${day}-${period}`} className="bg-card p-2 min-h-[48px]" />;
                       return (
                         <div key={`${day}-${period}`} className={`p-2 min-h-[48px] flex flex-col items-center justify-center ${entry ? `${colors?.bg || ''} ${colors?.border || ''} border` : 'bg-card'}`}>
@@ -1331,16 +1347,33 @@ function TeacherScheduleReport({ teacherId, showBreaks, showEmpty }: { teacherId
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">
-          <div className="min-w-[600px]">
-            <div className="grid gap-px bg-border rounded-lg overflow-hidden" style={{ gridTemplateColumns: '100px repeat(' + activeDays.length + ', 1fr)' }}>
+          <div style={{ minWidth: `${100 + activeDays.length * 80}px` }}>
+            <div className="grid gap-px bg-border rounded-lg overflow-hidden" style={{ gridTemplateColumns: `100px repeat(${activeDays.length}, minmax(80px, 1fr))` }}>
               <div className="bg-muted p-2 text-center text-xs font-medium text-muted-foreground flex items-center justify-center">Day / Period</div>
-              {activeDays.map((day) => <div key={day} className="bg-muted p-2 text-center text-xs font-medium text-muted-foreground">{day}</div>)}
+              {activeDays.map((day) => <div key={day} className="bg-muted p-2 text-center text-xs font-medium text-muted-foreground whitespace-nowrap">{day}</div>)}
               {visiblePeriods.map((period) => {
                 const isBreak = isBreakPeriod(period, timings);
                 const time = getPeriodTime(period, timings);
+                if (isBreak) {
+                  return (
+                    <Fragment key={`brk-${period}`}>
+                      <div className="bg-amber-100 dark:bg-amber-900/20 p-2 flex flex-col items-center justify-center gap-0.5">
+                        <span className="text-xs font-medium">{getPeriodLabel(period, timings)}</span>
+                        <span className="text-[10px] text-muted-foreground">{time}</span>
+                      </div>
+                      <div
+                        className="bg-amber-50 dark:bg-amber-950/10 p-2 flex items-center justify-center gap-1.5"
+                        style={{ gridColumn: `span ${activeDays.length}` }}
+                      >
+                        <Coffee className="h-3 w-3 text-amber-400" />
+                        <span className="text-xs font-medium text-amber-500">Break</span>
+                      </div>
+                    </Fragment>
+                  );
+                }
                 return (
                   <div key={`row-${period}`}>
-                    <div className={`bg-muted/50 p-2 flex flex-col items-center justify-center gap-0.5 ${isBreak ? 'bg-amber-100 dark:bg-amber-900/20' : ''}`}>
+                    <div className="bg-muted/50 p-2 flex flex-col items-center justify-center gap-0.5">
                       <span className="text-xs font-medium">{getPeriodLabel(period, timings)}</span>
                       <span className="text-[10px] text-muted-foreground">{time}</span>
                     </div>
@@ -1350,7 +1383,6 @@ function TeacherScheduleReport({ teacherId, showBreaks, showEmpty }: { teacherId
                       const cls = entry ? classes.find((c) => c.id === entry.classId) : null;
                       const sec = entry ? sections.find((s) => s.id === entry.sectionId) : null;
                       const colors = entry ? getSubjectColor(entry.subjectId) : null;
-                      if (isBreak) return <div key={`${day}-${period}`} className="bg-amber-50 dark:bg-amber-950/10 p-2 flex items-center justify-center"><Coffee className="h-3 w-3 text-amber-400" /></div>;
                       if (!entry && !showEmpty) return <div key={`${day}-${period}`} className="bg-card p-2 min-h-[48px]" />;
                       return (
                         <div key={`${day}-${period}`} className={`p-2 min-h-[48px] flex flex-col items-center justify-center ${entry ? `${colors?.bg || ''} ${colors?.border || ''} border` : 'bg-card'}`}>
@@ -1460,20 +1492,37 @@ function DaywiseScheduleReport({
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
-              <div className="min-w-[600px]">
-                <div className="grid gap-px bg-border rounded-lg overflow-hidden" style={{ gridTemplateColumns: '100px repeat(' + visibleCombos.length + ', 1fr)' }}>
+              <div style={{ minWidth: `${100 + visibleCombos.length * 80}px` }}>
+                <div className="grid gap-px bg-border rounded-lg overflow-hidden" style={{ gridTemplateColumns: `100px repeat(${visibleCombos.length}, minmax(80px, 1fr))` }}>
                   <div className="bg-muted p-2 text-center text-xs font-medium text-muted-foreground flex items-center justify-center">Period</div>
                   {visibleCombos.map((combo) => (
-                    <div key={combo.value} className="bg-muted p-2 text-center text-xs font-medium text-muted-foreground">
+                    <div key={combo.value} className="bg-muted p-2 text-center text-xs font-medium text-muted-foreground whitespace-nowrap overflow-hidden text-ellipsis">
                       {combo.label}
                     </div>
                   ))}
                   {visiblePeriods.map((period) => {
                     const isBreak = isBreakPeriod(period, timings);
                     const time = getPeriodTime(period, timings);
+                    if (isBreak) {
+                      return (
+                        <Fragment key={`brk-${day}-${period}`}>
+                          <div className="bg-amber-100 dark:bg-amber-900/20 p-2 flex flex-col items-center justify-center gap-0.5">
+                            <span className="text-xs font-medium">{getPeriodLabel(period, timings)}</span>
+                            <span className="text-[10px] text-muted-foreground">{time}</span>
+                          </div>
+                          <div
+                            className="bg-amber-50 dark:bg-amber-950/10 p-2 flex items-center justify-center gap-1.5"
+                            style={{ gridColumn: `span ${visibleCombos.length}` }}
+                          >
+                            <Coffee className="h-3 w-3 text-amber-400" />
+                            <span className="text-xs font-medium text-amber-500">Break</span>
+                          </div>
+                        </Fragment>
+                      );
+                    }
                     return (
                       <div key={`row-${day}-${period}`}>
-                        <div className={`bg-muted/50 p-2 flex flex-col items-center justify-center gap-0.5 ${isBreak ? 'bg-amber-100 dark:bg-amber-900/20' : ''}`}>
+                        <div className="bg-muted/50 p-2 flex flex-col items-center justify-center gap-0.5">
                           <span className="text-xs font-medium">{getPeriodLabel(period, timings)}</span>
                           <span className="text-[10px] text-muted-foreground">{time}</span>
                         </div>
@@ -1482,7 +1531,6 @@ function DaywiseScheduleReport({
                           const teacher = entry ? teachers.find((t) => t.id === entry.teacherId) : null;
                           const subject = entry ? subjects.find((s) => s.id === entry.subjectId) : null;
                           const colors = entry ? getSubjectColor(entry.subjectId) : null;
-                          if (isBreak) return <div key={`${combo.value}-${period}`} className="bg-amber-50 dark:bg-amber-950/10 p-2 flex items-center justify-center"><Coffee className="h-3 w-3 text-amber-400" /></div>;
                           if (!entry && !showEmpty) return <div key={`${combo.value}-${period}`} className="bg-card p-2 min-h-[48px]" />;
                           return (
                             <div key={`${combo.value}-${period}`} className={`p-2 min-h-[48px] flex flex-col items-center justify-center ${entry ? `${colors?.bg || ''} ${colors?.border || ''} border` : 'bg-card'}`}>
@@ -1657,17 +1705,7 @@ function buildCombinedClassTimetableHtml(
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   const reportTitle = 'Class Timetable Report';
 
-  // Build cover page
-  const coverHtml = `
-  <div class="cover-page">
-    <div class="cover-school">${esc(schoolName)}</div>
-    <div class="cover-title">${esc(reportTitle)}</div>
-    <div class="cover-date">${esc(today)}</div>
-    <div class="cover-list">
-      ${combos.map((c, i) => `<div class="cover-item">${i + 1}. ${esc(c.label)}</div>`).join('')}
-    </div>
-    <div style="margin-top: 20px; font-size: 10px; color: #999;">${combos.length} class${combos.length !== 1 ? 'es' : ''} selected</div>
-  </div>`;
+  // No cover page
 
   // Build each timetable
   let timetablesHtml = '';
@@ -1688,8 +1726,12 @@ function buildCombinedClassTimetableHtml(
       const label = getPeriodLabel(p, timings);
       const rowClass = isBreak ? ' class="brk"' : '';
       rows += `<tr${rowClass}><td class="tp"><span class="pl">${esc(label)}</span><span class="tt-time">${esc(time)}</span></td>`;
+      if (isBreak) {
+        rows += `<td class="tb" colspan="${activeDays.length}" style="text-align:center;">&#9749; Break</td>`;
+        rows += '</tr>';
+        continue;
+      }
       for (const day of activeDays) {
-        if (isBreak) { rows += '<td class="tb">&#9749; Break</td>'; continue; }
         const entry = filteredEntries.find((e) => e.day === day && e.period === p);
         if (entry) {
           const subj = getS(entry.subjectId);
@@ -1702,7 +1744,6 @@ function buildCombinedClassTimetableHtml(
         }
       }
       rows += '</tr>';
-    }
 
     const customHeaderHtml = s.headerContent ? `<div class="custom-header">${esc(s.headerContent)}</div>` : '';
 
@@ -1726,7 +1767,6 @@ function buildCombinedClassTimetableHtml(
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${buildTimetableCss(isLandscape, s.sheetsPerPage)}</style></head>
 <body>
-  ${coverHtml}
   ${timetablesHtml}
   <div class="page-footer">
     <span class="f-left">${esc(today)}</span>
@@ -1754,16 +1794,7 @@ function buildCombinedTeacherScheduleHtml(
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   const reportTitle = 'Teacher Schedule Report';
 
-  const coverHtml = `
-  <div class="cover-page">
-    <div class="cover-school">${esc(schoolName)}</div>
-    <div class="cover-title">${esc(reportTitle)}</div>
-    <div class="cover-date">${esc(today)}</div>
-    <div class="cover-list">
-      ${teacherList.map((t, i) => `<div class="cover-item">${i + 1}. ${esc(t.name)} (${esc(t.shortName)})</div>`).join('')}
-    </div>
-    <div style="margin-top: 20px; font-size: 10px; color: #999;">${teacherList.length} teacher${teacherList.length !== 1 ? 's' : ''} selected</div>
-  </div>`;
+  // No cover page
 
   let timetablesHtml = '';
   for (const tchr of teacherList) {
@@ -1781,8 +1812,12 @@ function buildCombinedTeacherScheduleHtml(
       const label = getPeriodLabel(p, timings);
       const rowClass = isBreak ? ' class="brk"' : '';
       rows += `<tr${rowClass}><td class="tp"><span class="pl">${esc(label)}</span><span class="tt-time">${esc(time)}</span></td>`;
+      if (isBreak) {
+        rows += `<td class="tb" colspan="${activeDays.length}" style="text-align:center;">&#9749; Break</td>`;
+        rows += '</tr>';
+        continue;
+      }
       for (const day of activeDays) {
-        if (isBreak) { rows += '<td class="tb">&#9749; Break</td>'; continue; }
         const entry = filteredEntries.find((e) => e.day === day && e.period === p);
         if (entry) {
           const subj = getS(entry.subjectId);
@@ -1820,7 +1855,6 @@ function buildCombinedTeacherScheduleHtml(
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${buildTimetableCss(isLandscape, s.sheetsPerPage)}</style></head>
 <body>
-  ${coverHtml}
   ${timetablesHtml}
   <div class="page-footer">
     <span class="f-left">${esc(today)}</span>
@@ -1858,8 +1892,12 @@ function buildClassTimetableHtml(
     const label = getPeriodLabel(p, timings);
     const rowClass = isBreak ? ' class="brk"' : '';
     rows += `<tr${rowClass}><td class="tp"><span class="pl">${esc(label)}</span><span class="tt-time">${esc(time)}</span></td>`;
+    if (isBreak) {
+      rows += `<td class="tb" colspan="${activeDays.length}" style="text-align:center;">&#9749; Break</td>`;
+      rows += '</tr>';
+      continue;
+    }
     for (const day of activeDays) {
-      if (isBreak) { rows += '<td class="tb">&#9749; Break</td>'; continue; }
       const entry = filteredEntries.find((e: any) => e.day === day && e.period === p);
       if (entry) {
         const subj = getS(entry.subjectId);
@@ -1930,8 +1968,12 @@ function buildTeacherScheduleHtml(
     const label = getPeriodLabel(p, timings);
     const rowClass = isBreak ? ' class="brk"' : '';
     rows += `<tr${rowClass}><td class="tp"><span class="pl">${esc(label)}</span><span class="tt-time">${esc(time)}</span></td>`;
+    if (isBreak) {
+      rows += `<td class="tb" colspan="${activeDays.length}" style="text-align:center;">&#9749; Break</td>`;
+      rows += '</tr>';
+      continue;
+    }
     for (const day of activeDays) {
-      if (isBreak) { rows += '<td class="tb">&#9749; Break</td>'; continue; }
       const entry = filteredEntries.find((e: any) => e.day === day && e.period === p);
       if (entry) {
         const subj = getS(entry.subjectId);
@@ -2013,8 +2055,12 @@ function buildDaywiseScheduleHtml(
       const label = getPeriodLabel(p, timings);
       const rowClass = isBreak ? ' class="brk"' : '';
       rows += `<tr${rowClass}><td class="tp"><span class="pl">${esc(label)}</span><span class="tt-time">${esc(time)}</span></td>`;
+      if (isBreak) {
+        rows += `<td class="tb" colspan="${combos.length}" style="text-align:center;">&#9749; Break</td>`;
+        rows += '</tr>';
+        continue;
+      }
       for (const combo of combos) {
-        if (isBreak) { rows += '<td class="tb">&#9749; Break</td>'; continue; }
         const entry = entries.find((e: any) => e.day === day && e.period === p && e.classId === combo.classId && e.sectionId === combo.sectionId);
         if (entry) {
           const subj = getS(entry.subjectId);
