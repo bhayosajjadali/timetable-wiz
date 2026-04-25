@@ -1127,7 +1127,13 @@ function buildPeriodCountReportHtml(params: {
 
       tablesHtml += `
         <div class="table-chunk sheet-slot" style="width:100%;display:block;">
-          <div class="chunk-title">Table ${ci + 1}</div>
+          <div class="report-header">
+            <div class="school-name">${esc(schoolName)}</div>
+            <div class="report-title">Teacher Period Count Report</div>
+            <div class="report-subtitle">Part ${ci + 1} | ${esc(daysLabel)} | Max ${maxPossiblePerTeacher} periods/teacher</div>
+            ${ci === 0 ? customHeaderHtml : ''}
+          </div>
+          <div class="sheet-label-pc">Part ${ci + 1} — ${esc(daysLabel)}</div>
           <table class="pc-table">
             <thead><tr>
               <th class="th-sno">#</th>
@@ -1152,6 +1158,7 @@ function buildPeriodCountReportHtml(params: {
   const customFooterHtml = s.footerContent
     ? `<div class="custom-footer">${esc(s.footerContent)}</div>`
     : '';
+  const bodyClass = tablesPerPage > 1 ? ' class="sheets-multi-pc"' : '';
 
   return `<!DOCTYPE html>
 <html>
@@ -1164,6 +1171,37 @@ function buildPeriodCountReportHtml(params: {
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; font-size: ${fontSize}; line-height: 1.3; color: #1D1D1F; background: #fff; }
+  ${tablesPerPage > 1 ? `
+  body.sheets-multi-pc {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  body.sheets-multi-pc .sheet-slot {
+    flex: 0 0 auto;
+    max-height: calc(${isLandscape ? '210mm' : '297mm'} - 12.7mm - 12.7mm - 12mm - 20px) / ${tablesPerPage});
+    overflow: hidden;
+    page-break-inside: avoid;
+    break-inside: avoid;
+    border: 1px solid #D1D1D6;
+    border-radius: 4px;
+    padding: 4px 6px;
+  }
+  body.sheets-multi-pc .sheet-slot:nth-child(${tablesPerPage}n) {
+    page-break-after: always;
+    break-after: page;
+  }
+  body.sheets-multi-pc .sheet-slot:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+  /* Hide full report-header on non-first sheets, hide compact label on first sheets */
+  body.sheets-multi-pc .sheet-slot:nth-child(${tablesPerPage}n+1) .sheet-label-pc,
+  body.sheets-multi-pc .sheet-slot:first-child .sheet-label-pc { display: none; }
+  body.sheets-multi-pc .sheet-slot .report-header { display: none; }
+  body.sheets-multi-pc .sheet-slot:nth-child(${tablesPerPage}n+1) .report-header,
+  body.sheets-multi-pc .sheet-slot:first-child .report-header { display: block; }
+  ` : ''}
 
   .report-header { text-align: center; padding-bottom: 6px; margin-bottom: 8px; border-bottom: 2.5px solid #1B2A4A; }
   .report-header::after { content: ''; display: block; margin-top: 4px; height: 1px; background: linear-gradient(to right, transparent, #1B2A4A, transparent); }
@@ -1195,6 +1233,7 @@ function buildPeriodCountReportHtml(params: {
   .chunk-title { font-size: ${headerFontSize}; font-weight: 600; text-align: center; margin-bottom: 3px; color: #1B2A4A; }
 
   .sheet-slot { width: 100%; page-break-inside: avoid; break-inside: avoid; }
+  .sheet-label-pc { text-align: center; padding: 2px 0 3px; margin-bottom: 3px; border-bottom: 1.5px solid #1B2A4A; font-size: ${headerFontSize}; font-weight: 600; color: #1B2A4A; }
 
   .summary-bar { display: flex; gap: 16px; justify-content: center; margin-top: 8px; flex-wrap: wrap; }
   .summary-item { text-align: center; padding: 4px 12px; background: #F8F9FA; border-radius: 6px; border: 1px solid #E5E5EA; }
@@ -1209,13 +1248,13 @@ function buildPeriodCountReportHtml(params: {
   }
 </style>
 </head>
-<body>
-  <div class="report-header">
+<body${bodyClass}>
+  ${tablesPerPage > 1 ? '' : `<div class="report-header">
     <div class="school-name">${esc(schoolName)}</div>
     <div class="report-title">Teacher Period Count Report</div>
     <div class="report-subtitle">${esc(daysLabel)} | Max ${maxPossiblePerTeacher} periods/teacher | ${teachersCount} teachers</div>
     ${customHeaderHtml}
-  </div>
+  </div>`}
 
   ${tablesHtml}
 
@@ -1823,7 +1862,13 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
   body.sheets-multi .sheet-slot:last-child {
     page-break-after: auto;
     break-after: auto;
-  }` : '\n  body.sheets-multi .sheet-slot { width: 100%; }';
+  }
+  /* First sheet in each page-group gets full header, rest get compact label */
+  body.sheets-multi .sheet-slot:nth-child(${sheetsPerPage}n+1) .sheet-label,
+  body.sheets-multi .sheet-slot:first-child .sheet-label { display: none; }
+  body.sheets-multi .sheet-slot:nth-child(${sheetsPerPage}n+1) .page-header,
+  body.sheets-multi .sheet-slot:first-child .page-header { display: block; }
+  body.sheets-multi .sheet-slot .page-header { display: none; }` : '\n  body.sheets-multi .sheet-slot { width: 100%; }';
 
   return `
   @page {
@@ -1839,7 +1884,7 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
   }
   ${nUpCss}
 
-  /* ── Page header ── */
+  /* ── Page header (full — first sheet on each page) ── */
   .page-header {
     text-align: center;
     padding-bottom: 8px;
@@ -1855,6 +1900,23 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
   .page-header .report-title { font-size: 12px; font-weight: 600; color: #333; margin-top: 3px; }
   .page-header .report-sub { font-size: 10px; color: #555; margin-top: 2px; }
   .custom-header { text-align: center; font-size: 9px; color: #666; font-style: italic; margin-top: 4px; }
+
+  /* ── Compact sheet label (non-first sheets on a page) ── */
+  .sheet-label {
+    text-align: center;
+    padding: 2px 0 4px;
+    margin-bottom: 4px;
+    border-bottom: 1.5px solid #1B2A4A;
+  }
+  .sheet-label-title {
+    font-size: 10px;
+    font-weight: 600;
+    color: #1B2A4A;
+  }
+  .sheet-label-sub {
+    font-size: 8px;
+    color: #555;
+  }
 
   /* ── Footer ── */
   .page-footer {
@@ -1914,8 +1976,8 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
   .fi { padding: 3px 8px; background: #E8F5E9; border: 1px solid #A5D6A7; border-radius: 4px; font-size: 8px; font-weight: 600; color: #2E7D32; }
 
   /* ── Individual timetable page in combined report ── */
-  .timetable-page { page-break-after: always; break-after: page; padding-bottom: 12px; }
-  .timetable-page:last-child { page-break-after: auto; break-after: auto; }
+  .timetable-page { padding-bottom: 12px; }
+  .timetable-page:last-child { padding-bottom: 0; }
 
   @media print {
     body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -1941,11 +2003,14 @@ function buildCombinedClassTimetableHtml(
   const reportTitle = 'Class Timetable Report';
 
   let timetablesHtml = '';
-  for (const combo of combos) {
+  for (let idx = 0; idx < combos.length; idx++) {
+    const combo = combos[idx];
     const cls = classes.find((c) => c.id === combo.classId);
     const sec = sections.find((s) => s.id === combo.sectionId);
     const filteredEntries = entries.filter((e) => e.classId === combo.classId && e.sectionId === combo.sectionId);
     const subtitle = `${cls?.name || ''} — ${sec?.name || ''}`;
+    const isFirstOnPage = idx % s.sheetsPerPage === 0;
+    const customHeaderHtml = s.headerContent && isFirstOnPage ? `<div class="custom-header">${esc(s.headerContent)}</div>` : '';
 
     const getS = (id: string) => subjects.find((s) => s.id === id);
     const getT = (id: string) => teachers.find((t) => t.id === id);
@@ -1978,9 +2043,29 @@ function buildCombinedClassTimetableHtml(
       rows += '</tr>';
     }
 
-    const customHeaderHtml = s.headerContent ? `<div class="custom-header">${esc(s.headerContent)}</div>` : '';
-
-    timetablesHtml += `
+    if (s.sheetsPerPage > 1) {
+      // Multi-sheet mode: wrap in sheet-slot with first/compact header logic
+      timetablesHtml += `
+    <div class="sheet-slot">
+      <div class="page-header">
+        <div class="header-bar"></div>
+        <div class="school-name">${esc(schoolName)}</div>
+        <div class="report-title">${esc(reportTitle)}</div>
+        <div class="report-sub">${esc(subtitle)}</div>
+        ${customHeaderHtml}
+      </div>
+      <div class="sheet-label">
+        <div class="sheet-label-title">${esc(reportTitle)}</div>
+        <div class="sheet-label-sub">${esc(subtitle)}</div>
+      </div>
+      <table class="tt">
+        <thead><tr><th>Day / Period</th>${activeDays.map((d: string) => `<th>${esc(d)}</th>`).join('')}</tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+    } else {
+      // Single sheet per page — each timetable on its own page
+      timetablesHtml += `
     <div class="timetable-page">
       <div class="page-header">
         <div class="header-bar"></div>
@@ -1994,12 +2079,14 @@ function buildCombinedClassTimetableHtml(
         <tbody>${rows}</tbody>
       </table>
     </div>`;
+    }
   }
 
   const customFooterHtml = s.footerContent ? `<div class="custom-footer">${esc(s.footerContent)}</div>` : '';
+  const bodyClass = s.sheetsPerPage > 1 ? ' class="sheets-multi"' : '';
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${buildTimetableCss(isLandscape, s.sheetsPerPage)}</style></head>
-<body>
+<body${bodyClass}>
   ${timetablesHtml}
   <div class="page-footer">
     <span class="f-left">${esc(today)}</span>
@@ -2028,8 +2115,11 @@ function buildCombinedTeacherScheduleHtml(
   const reportTitle = 'Teacher Schedule Report';
 
   let timetablesHtml = '';
-  for (const tchr of teacherList) {
+  for (let idx = 0; idx < teacherList.length; idx++) {
+    const tchr = teacherList[idx];
     const filteredEntries = entries.filter((e) => e.teacherId === tchr.id);
+    const isFirstOnPage = idx % s.sheetsPerPage === 0;
+    const customHeaderHtml = s.headerContent && isFirstOnPage ? `<div class="custom-header">${esc(s.headerContent)}</div>` : '';
 
     const getS = (id: string) => subjects.find((s) => s.id === id);
     const getC = (id: string) => classes.find((c) => c.id === id);
@@ -2064,9 +2154,27 @@ function buildCombinedTeacherScheduleHtml(
       rows += '</tr>';
     }
 
-    const customHeaderHtml = s.headerContent ? `<div class="custom-header">${esc(s.headerContent)}</div>` : '';
-
-    timetablesHtml += `
+    if (s.sheetsPerPage > 1) {
+      timetablesHtml += `
+    <div class="sheet-slot">
+      <div class="page-header">
+        <div class="header-bar"></div>
+        <div class="school-name">${esc(schoolName)}</div>
+        <div class="report-title">${esc(reportTitle)}</div>
+        <div class="report-sub">${esc(tchr.name)}</div>
+        ${customHeaderHtml}
+      </div>
+      <div class="sheet-label">
+        <div class="sheet-label-title">${esc(reportTitle)}</div>
+        <div class="sheet-label-sub">${esc(tchr.name)}</div>
+      </div>
+      <table class="tt">
+        <thead><tr><th>Day / Period</th>${activeDays.map((d: string) => `<th>${esc(d)}</th>`).join('')}</tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+    } else {
+      timetablesHtml += `
     <div class="timetable-page">
       <div class="page-header">
         <div class="header-bar"></div>
@@ -2080,12 +2188,14 @@ function buildCombinedTeacherScheduleHtml(
         <tbody>${rows}</tbody>
       </table>
     </div>`;
+    }
   }
 
   const customFooterHtml = s.footerContent ? `<div class="custom-footer">${esc(s.footerContent)}</div>` : '';
+  const bodyClass = s.sheetsPerPage > 1 ? ' class="sheets-multi"' : '';
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${buildTimetableCss(isLandscape, s.sheetsPerPage)}</style></head>
-<body>
+<body${bodyClass}>
   ${timetablesHtml}
   <div class="page-footer">
     <span class="f-left">${esc(today)}</span>
@@ -2277,7 +2387,8 @@ function buildDaywiseScheduleHtml(
   const getT = (id: string) => teachers.find((t: any) => t.id === id);
 
   let dayBlocksHtml = '';
-  for (const day of selectedDays) {
+  for (let idx = 0; idx < selectedDays.length; idx++) {
+    const day = selectedDays[idx];
     let rows = '';
     for (let p = 1; p <= timings.periodsPerDay; p++) {
       const isBreak = isBreakPeriod(p, timings);
@@ -2306,7 +2417,31 @@ function buildDaywiseScheduleHtml(
       rows += '</tr>';
     }
 
-    dayBlocksHtml += `
+    if (s.sheetsPerPage > 1) {
+      // Multi-sheet mode: wrap each day in sheet-slot with first/compact header
+      dayBlocksHtml += `
+    <div class="sheet-slot">
+      <div class="page-header">
+        <div class="header-bar"></div>
+        <div class="school-name">${esc(schoolName)}</div>
+        <div class="report-title">${esc(reportTitle)}</div>
+        <div class="report-sub">${esc(day)} | ${combos.length} class${combos.length !== 1 ? 'es' : ''}</div>
+        ${idx % s.sheetsPerPage === 0 && s.headerContent ? `<div class="custom-header">${esc(s.headerContent)}</div>` : ''}
+      </div>
+      <div class="sheet-label">
+        <div class="sheet-label-title">${esc(day)}</div>
+        <div class="sheet-label-sub">${combos.length} class${combos.length !== 1 ? 'es' : ''}</div>
+      </div>
+      <div class="day-block">
+        <table class="tt">
+          <thead><tr><th>Period</th>${combos.map((c) => `<th>${esc(c.label)}</th>`).join('')}</tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+    } else {
+      // Single sheet per page
+      dayBlocksHtml += `
     <div class="day-block">
       <div class="db"><div class="dh">${esc(day)}</div></div>
       <table class="tt">
@@ -2314,6 +2449,7 @@ function buildDaywiseScheduleHtml(
         <tbody>${rows}</tbody>
       </table>
     </div>`;
+    }
   }
 
   const customHeaderHtml = s.headerContent
@@ -2330,13 +2466,13 @@ function buildDaywiseScheduleHtml(
   .day-block table.tt { margin-top: 0; }
 </style></head>
 <body${bodyClass}>
-  <div class="page-header">
+  ${s.sheetsPerPage === 1 ? `<div class="page-header">
     <div class="header-bar"></div>
     <div class="school-name">${esc(schoolName)}</div>
     <div class="report-title">${esc(reportTitle)}</div>
     <div class="report-sub">${esc(daysLabel)} | ${combos.length} class${combos.length !== 1 ? 'es' : ''}</div>
     ${customHeaderHtml}
-  </div>
+  </div>` : ''}
   <div class="page-footer">
     <span class="f-left">${esc(genTime)}</span>
     <span class="f-center"><span class="watermark">Generated by TimetableWiz</span> &mdash; ${esc(schoolName)} &mdash; ${esc(reportTitle)}</span>
