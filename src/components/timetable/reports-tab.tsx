@@ -2072,16 +2072,16 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
   .timetable-page + .timetable-page { page-break-before: always; break-before: page; }
   .timetable-page .page-header { flex-shrink: 0; }
   .timetable-page .page-header .school-name { font-size: 24px; letter-spacing: 0.6px; }
-  .timetable-page .page-header .report-title { font-size: 14px; }
-  .timetable-page .page-header .report-sub { font-size: 13px; }
+  .timetable-page .page-header .report-title { font-size: 22px; }
+  .timetable-page .page-header .report-sub { font-size: 22px; }
   .timetable-page .page-header .header-bar { height: 2.5px; margin-bottom: 8px; }
   .timetable-page .page-header { padding-bottom: 8px; margin-bottom: 10px; }
   .timetable-page .custom-header { font-size: 9.5px; }
   .timetable-page table.tt { flex: 1; table-layout: fixed; height: auto; }
   .timetable-page table.tt td, .timetable-page table.tt th { height: auto; }
-  .timetable-page .tp { width: 80px; min-width: 80px; font-size: 9.5px; }
-  .timetable-page .pl { font-size: 9.5px; }
-  .timetable-page .tt-time { font-size: 7.5px; }
+  .timetable-page .tp { width: 90px; min-width: 90px; font-size: 13px; }
+  .timetable-page .pl { font-size: 13px; }
+  .timetable-page .tt-time { font-size: 11px; color: #1F2937; font-weight: 600; }
   .timetable-page .tf { font-size: 13px; }
   .timetable-page .tf b { font-size: 13px; }
   .timetable-page .tn { font-size: 10px; }
@@ -2155,13 +2155,13 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
     font-family: 'Lora', Georgia, 'Times New Roman', serif;
   }
   .page-header .report-title {
-    font-size: 12px;
+    font-size: 18px;
     font-weight: 600;
     color: #374151;
     margin-top: 3px;
   }
   .page-header .report-sub {
-    font-size: 10px;
+    font-size: 18px;
     color: #374151;
     font-weight: 600;
     margin-top: 2px;
@@ -2242,21 +2242,22 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
   /* ── Period label column ── */
   .tp {
     background: #F3F4F6 !important;
-    font-size: 8.5px;
-    width: 66px;
-    min-width: 66px;
+    font-size: 11px;
+    width: 72px;
+    min-width: 72px;
     border-right: 1px solid #9CA3AF !important;
   }
   .pl {
     display: block;
     font-weight: 700;
     color: #111827;
-    font-size: 8.5px;
+    font-size: 11px;
   }
   .tt-time {
     display: block;
-    font-size: 6.5px;
-    color: #4B5563;
+    font-size: 9px;
+    color: #1F2937;
+    font-weight: 600;
     margin-top: 0.5px;
   }
 
