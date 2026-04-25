@@ -237,7 +237,7 @@ function buildSubstituteReportHtml(
    ==================================================================== */
 
 export function SubstitutesTab() {
-  const { substitutes, teachers, entries, timings, schoolName, addSubstitute, deleteSubstitute } =
+  const { substitutes, teachers, entries, timings, schoolName, subjects, classes, sections, addSubstitute, deleteSubstitute } =
     useTimetableStore();
   const { toast } = useToast();
   const [isGenerating, setIsGenerating] = useState(false);
@@ -273,9 +273,9 @@ export function SubstitutesTab() {
   const substitutedEntryIds = new Set(daySubstitutes.map((s) => s.entryId));
 
   const getTeacher = (id: string) => teachers.find((t) => t.id === id);
-  const getSubject = (id: string) => useTimetableStore.getState().subjects.find((s) => s.id === id);
-  const getClass = (id: string) => useTimetableStore.getState().classes.find((c) => c.id === id);
-  const getSection = (id: string) => useTimetableStore.getState().sections.find((s) => s.id === id);
+  const getSubject = (id: string) => subjects.find((s) => s.id === id);
+  const getClass = (id: string) => classes.find((c) => c.id === id);
+  const getSection = (id: string) => sections.find((s) => s.id === id);
 
   const handleAddSubstitute = () => {
     if (!entryToSub || !selectedSubTeacher) {

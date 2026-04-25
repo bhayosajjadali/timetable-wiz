@@ -175,6 +175,7 @@ export function ReportsTab() {
   const { downloadPdf, isGenerating } = usePdfDownload();
 
   const { classes, sections, teachers, timings } = useTimetableStore();
+  const storeSnapshot = useTimetableStore();
   const availableClasses = classes.filter((c) => c.sectionIds.length > 0);
 
   // ── Helpers ──
@@ -237,7 +238,7 @@ export function ReportsTab() {
 
   // ── PDF Export: build HTML and trigger action ──
   const handleExport = useCallback(async (action: 'print' | 'download') => {
-    const store = useTimetableStore.getState();
+    const store = storeSnapshot;
     const { schoolName, timings: storeTimings, entries, teachers: storeTeachers, classes: storeClasses, sections: storeSections, subjects } = store;
     let html = '';
     let title = '';
@@ -325,7 +326,7 @@ export function ReportsTab() {
       console.error('Export failed:', err);
       toast({ title: 'Export failed', description: 'An error occurred. Please try again.', variant: 'destructive' });
     }
-  }, [exportType, exportShowBreaks, exportShowEmpty, exportOrientation, exportSheetsPerPage, exportHeaderContent, exportFooterContent, exportSelectedClasses, exportSelectedTeachers, exportSelectedDays, exportDetailMode, exportDaywiseDays, exportDaywiseClasses, classSectionOpts, exportSettings, toast, downloadPdf]);
+  }, [exportType, exportShowBreaks, exportShowEmpty, exportOrientation, exportSheetsPerPage, exportHeaderContent, exportFooterContent, exportSelectedClasses, exportSelectedTeachers, exportSelectedDays, exportDetailMode, exportDaywiseDays, exportDaywiseClasses, classSectionOpts, exportSettings, toast, downloadPdf, storeSnapshot]);
 
   // ── PDF Export summary text ──
   const exportSummary = useMemo(() => {

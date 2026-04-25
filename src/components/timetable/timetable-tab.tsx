@@ -121,6 +121,8 @@ function TimetableGrid({ classId, sectionId }: { classId: string; sectionId: str
     teachers,
     subjects,
     timings,
+    classes,
+    sections,
     addEntry,
     deleteEntry,
   } = useTimetableStore();
@@ -237,8 +239,8 @@ function TimetableGrid({ classId, sectionId }: { classId: string; sectionId: str
     ? activeDays.filter((d) => !getEntry(d, cellToFill.period)).length
     : 0;
 
-  const selectedClassName = useTimetableStore.getState().classes.find((c) => c.id === classId)?.name || '';
-  const selectedSectionName = useTimetableStore.getState().sections.find((s) => s.id === sectionId)?.name || '';
+  const selectedClassName = classes.find((c) => c.id === classId)?.name || '';
+  const selectedSectionName = sections.find((s) => s.id === sectionId)?.name || '';
 
   return (
     <>
