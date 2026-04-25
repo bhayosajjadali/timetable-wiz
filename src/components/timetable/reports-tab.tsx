@@ -1125,15 +1125,14 @@ function buildPeriodCountReportHtml(params: {
         tableRows += '</tr>';
       });
 
+      const isFirstOnPage = ci % tablesPerPage === 0;
+      const chunkHeaderHtml = isFirstOnPage
+        ? `<div class="report-header"><div class="school-name">${esc(schoolName)}</div><div class="report-title">Teacher Period Count Report</div><div class="report-subtitle">${esc(daysLabel)} | Max ${maxPossiblePerTeacher} periods/teacher | ${teachersCount} teachers</div>${ci === 0 ? customHeaderHtml : ''}</div>`
+        : `<div class="sheet-label-pc">Part ${ci + 1} — ${esc(daysLabel)}</div>`;
+
       tablesHtml += `
         <div class="table-chunk sheet-slot" style="width:100%;display:block;">
-          <div class="report-header">
-            <div class="school-name">${esc(schoolName)}</div>
-            <div class="report-title">Teacher Period Count Report</div>
-            <div class="report-subtitle">Part ${ci + 1} | ${esc(daysLabel)} | Max ${maxPossiblePerTeacher} periods/teacher</div>
-            ${ci === 0 ? customHeaderHtml : ''}
-          </div>
-          <div class="sheet-label-pc">Part ${ci + 1} — ${esc(daysLabel)}</div>
+          ${chunkHeaderHtml}
           <table class="pc-table">
             <thead><tr>
               <th class="th-sno">#</th>
@@ -1175,32 +1174,29 @@ function buildPeriodCountReportHtml(params: {
   body.sheets-multi-pc {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 0;
   }
   body.sheets-multi-pc .sheet-slot {
-    flex: 0 0 auto;
-    max-height: calc(${isLandscape ? '210mm' : '297mm'} - 12.7mm - 12.7mm - 12mm - 20px) / ${tablesPerPage});
-    overflow: hidden;
+    flex: 1 1 0%;
+    min-height: 0;
     page-break-inside: avoid;
     break-inside: avoid;
     border: 1px solid #D1D1D6;
     border-radius: 4px;
     padding: 4px 6px;
+    margin-bottom: 4px;
+    overflow: hidden;
+    contain: layout paint;
   }
   body.sheets-multi-pc .sheet-slot:nth-child(${tablesPerPage}n) {
     page-break-after: always;
     break-after: page;
+    margin-bottom: 0;
   }
   body.sheets-multi-pc .sheet-slot:last-child {
     page-break-after: auto;
     break-after: auto;
   }
-  /* Hide full report-header on non-first sheets, hide compact label on first sheets */
-  body.sheets-multi-pc .sheet-slot:nth-child(${tablesPerPage}n+1) .sheet-label-pc,
-  body.sheets-multi-pc .sheet-slot:first-child .sheet-label-pc { display: none; }
-  body.sheets-multi-pc .sheet-slot .report-header { display: none; }
-  body.sheets-multi-pc .sheet-slot:nth-child(${tablesPerPage}n+1) .report-header,
-  body.sheets-multi-pc .sheet-slot:first-child .report-header { display: block; }
   ` : ''}
 
   .report-header { text-align: center; padding-bottom: 6px; margin-bottom: 8px; border-bottom: 2.5px solid #1B2A4A; }
@@ -1836,39 +1832,33 @@ function esc(str: string): string {
 /* ---------- Shared professional CSS for timetable grid reports ---------- */
 
 function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string {
-  const pageH = isLandscape ? '210mm' : '297mm';
-  const availH = `calc(${pageH} - 12.7mm - 12.7mm - 12mm)`;
-  const sheetMaxH = sheetsPerPage > 1 ? `calc(${availH} / ${sheetsPerPage} - 8px)` : 'none';
   const nUpCss = sheetsPerPage > 1 ? `
   body.sheets-multi {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 0;
   }
   body.sheets-multi .sheet-slot {
-    flex: 0 0 auto;
-    max-height: ${sheetMaxH};
-    overflow: hidden;
+    flex: 1 1 0%;
+    min-height: 0;
     page-break-inside: avoid;
     break-inside: avoid;
     border: 1px solid #D1D1D6;
     border-radius: 4px;
     padding: 6px 8px;
+    margin-bottom: 4px;
+    overflow: hidden;
+    contain: layout paint;
   }
   body.sheets-multi .sheet-slot:nth-child(${sheetsPerPage}n) {
     page-break-after: always;
     break-after: page;
+    margin-bottom: 0;
   }
   body.sheets-multi .sheet-slot:last-child {
     page-break-after: auto;
     break-after: auto;
-  }
-  /* First sheet in each page-group gets full header, rest get compact label */
-  body.sheets-multi .sheet-slot:nth-child(${sheetsPerPage}n+1) .sheet-label,
-  body.sheets-multi .sheet-slot:first-child .sheet-label { display: none; }
-  body.sheets-multi .sheet-slot:nth-child(${sheetsPerPage}n+1) .page-header,
-  body.sheets-multi .sheet-slot:first-child .page-header { display: block; }
-  body.sheets-multi .sheet-slot .page-header { display: none; }` : '\n  body.sheets-multi .sheet-slot { width: 100%; }';
+  }` : '\n  body.sheets-multi .sheet-slot { width: 100%; }';
 
   return `
   @page {
@@ -2044,20 +2034,13 @@ function buildCombinedClassTimetableHtml(
     }
 
     if (s.sheetsPerPage > 1) {
-      // Multi-sheet mode: wrap in sheet-slot with first/compact header logic
+      // Multi-sheet mode: only generate the correct header type for this position
+      const headerHtml = isFirstOnPage
+        ? `<div class="page-header"><div class="header-bar"></div><div class="school-name">${esc(schoolName)}</div><div class="report-title">${esc(reportTitle)}</div><div class="report-sub">${esc(subtitle)}</div>${customHeaderHtml}</div>`
+        : `<div class="sheet-label"><div class="sheet-label-title">${esc(reportTitle)}</div><div class="sheet-label-sub">${esc(subtitle)}</div></div>`;
       timetablesHtml += `
     <div class="sheet-slot">
-      <div class="page-header">
-        <div class="header-bar"></div>
-        <div class="school-name">${esc(schoolName)}</div>
-        <div class="report-title">${esc(reportTitle)}</div>
-        <div class="report-sub">${esc(subtitle)}</div>
-        ${customHeaderHtml}
-      </div>
-      <div class="sheet-label">
-        <div class="sheet-label-title">${esc(reportTitle)}</div>
-        <div class="sheet-label-sub">${esc(subtitle)}</div>
-      </div>
+      ${headerHtml}
       <table class="tt">
         <thead><tr><th>Day / Period</th>${activeDays.map((d: string) => `<th>${esc(d)}</th>`).join('')}</tr></thead>
         <tbody>${rows}</tbody>
@@ -2155,19 +2138,12 @@ function buildCombinedTeacherScheduleHtml(
     }
 
     if (s.sheetsPerPage > 1) {
+      const headerHtml = isFirstOnPage
+        ? `<div class="page-header"><div class="header-bar"></div><div class="school-name">${esc(schoolName)}</div><div class="report-title">${esc(reportTitle)}</div><div class="report-sub">${esc(tchr.name)}</div>${customHeaderHtml}</div>`
+        : `<div class="sheet-label"><div class="sheet-label-title">${esc(reportTitle)}</div><div class="sheet-label-sub">${esc(tchr.name)}</div></div>`;
       timetablesHtml += `
     <div class="sheet-slot">
-      <div class="page-header">
-        <div class="header-bar"></div>
-        <div class="school-name">${esc(schoolName)}</div>
-        <div class="report-title">${esc(reportTitle)}</div>
-        <div class="report-sub">${esc(tchr.name)}</div>
-        ${customHeaderHtml}
-      </div>
-      <div class="sheet-label">
-        <div class="sheet-label-title">${esc(reportTitle)}</div>
-        <div class="sheet-label-sub">${esc(tchr.name)}</div>
-      </div>
+      ${headerHtml}
       <table class="tt">
         <thead><tr><th>Day / Period</th>${activeDays.map((d: string) => `<th>${esc(d)}</th>`).join('')}</tr></thead>
         <tbody>${rows}</tbody>
@@ -2418,20 +2394,13 @@ function buildDaywiseScheduleHtml(
     }
 
     if (s.sheetsPerPage > 1) {
-      // Multi-sheet mode: wrap each day in sheet-slot with first/compact header
+      const isFirstOnPage = idx % s.sheetsPerPage === 0;
+      const dayHeaderHtml = isFirstOnPage
+        ? `<div class="page-header"><div class="header-bar"></div><div class="school-name">${esc(schoolName)}</div><div class="report-title">${esc(reportTitle)}</div><div class="report-sub">${esc(day)} | ${combos.length} class${combos.length !== 1 ? 'es' : ''}</div>${s.headerContent ? `<div class="custom-header">${esc(s.headerContent)}</div>` : ''}</div>`
+        : `<div class="sheet-label"><div class="sheet-label-title">${esc(day)}</div><div class="sheet-label-sub">${combos.length} class${combos.length !== 1 ? 'es' : ''}</div></div>`;
       dayBlocksHtml += `
     <div class="sheet-slot">
-      <div class="page-header">
-        <div class="header-bar"></div>
-        <div class="school-name">${esc(schoolName)}</div>
-        <div class="report-title">${esc(reportTitle)}</div>
-        <div class="report-sub">${esc(day)} | ${combos.length} class${combos.length !== 1 ? 'es' : ''}</div>
-        ${idx % s.sheetsPerPage === 0 && s.headerContent ? `<div class="custom-header">${esc(s.headerContent)}</div>` : ''}
-      </div>
-      <div class="sheet-label">
-        <div class="sheet-label-title">${esc(day)}</div>
-        <div class="sheet-label-sub">${combos.length} class${combos.length !== 1 ? 'es' : ''}</div>
-      </div>
+      ${dayHeaderHtml}
       <div class="day-block">
         <table class="tt">
           <thead><tr><th>Period</th>${combos.map((c) => `<th>${esc(c.label)}</th>`).join('')}</tr></thead>
