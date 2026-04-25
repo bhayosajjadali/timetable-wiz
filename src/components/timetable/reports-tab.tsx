@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useRef, useCallback, Fragment } from 'react';
+import { useState, useMemo, useRef, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -1468,65 +1468,75 @@ function ClassTimetableReport({ classId, sectionId, showBreaks, showEmpty }: { c
     return periods;
   }, [timings, showBreaks, showEmpty, activeDays, entries, classId, sectionId]);
 
+  const colCount = activeDays.length + 1;
+
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="pb-3">
         <div>
           <CardTitle className="text-lg">{cls?.name} — {sec?.name}</CardTitle>
           <CardDescription>Weekly timetable report</CardDescription>
         </div>
       </CardHeader>
       <CardContent>
-        <div className="overflow-x-auto">
-          <div style={{ minWidth: `${100 + activeDays.length * 80}px` }}>
-            <div className="grid gap-px bg-border rounded-lg overflow-hidden" style={{ gridTemplateColumns: `100px repeat(${activeDays.length}, minmax(80px, 1fr))` }}>
-              <div className="bg-muted p-2 text-center text-xs font-medium text-muted-foreground flex items-center justify-center">Day / Period</div>
-              {activeDays.map((day) => (
-                <div key={day} className="bg-muted p-2 text-center text-xs font-medium text-muted-foreground whitespace-nowrap">{day}</div>
-              ))}
+        <div className="overflow-x-auto -mx-6 px-6">
+          <table className="w-full border-collapse text-sm" style={{ tableLayout: 'fixed' }}>
+            <thead>
+              <tr>
+                <th className="w-[72px] border border-border bg-[#1B2A4A] text-white px-1.5 py-1.5 text-center text-[11px] font-semibold">Period</th>
+                {activeDays.map((day) => (
+                  <th key={day} className="border border-border bg-[#1B2A4A] text-white px-1 py-1.5 text-center text-[11px] font-semibold">{day}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
               {visiblePeriods.map((period) => {
                 const isBreak = isBreakPeriod(period, timings);
                 const time = getPeriodTime(period, timings);
                 if (isBreak) {
                   return (
-                    <Fragment key={`brk-${period}`}>
-                      <div className="bg-amber-100 dark:bg-amber-900/20 p-2 flex flex-col items-center justify-center gap-0.5">
-                        <span className="text-xs font-medium">{getPeriodLabel(period, timings)}</span>
-                        <span className="text-[10px] text-muted-foreground">{time}</span>
-                      </div>
-                      <div
-                        className="bg-amber-50 dark:bg-amber-950/10 p-2 flex items-center justify-center gap-1.5"
-                        style={{ gridColumn: `span ${activeDays.length}` }}
-                      >
-                        <Coffee className="h-3 w-3 text-amber-400" />
-                        <span className="text-xs font-medium text-amber-500">Break</span>
-                      </div>
-                    </Fragment>
+                    <tr key={`brk-${period}`} className="bg-amber-50 dark:bg-amber-950/20">
+                      <td colSpan={colCount} className="border border-border px-2 py-1 text-center">
+                        <div className="flex items-center justify-center gap-1.5 text-amber-600 dark:text-amber-400">
+                          <Coffee className="h-3 w-3" />
+                          <span className="text-[11px] font-medium">{getPeriodLabel(period, timings)}</span>
+                          <span className="text-[10px] text-muted-foreground">({time})</span>
+                        </div>
+                      </td>
+                    </tr>
                   );
                 }
                 return (
-                  <div key={`row-${period}`}>
-                    <div className="bg-muted/50 p-2 flex flex-col items-center justify-center gap-0.5">
-                      <span className="text-xs font-medium">{getPeriodLabel(period, timings)}</span>
-                      <span className="text-[10px] text-muted-foreground">{time}</span>
-                    </div>
+                  <tr key={`row-${period}`}>
+                    <td className="border border-border bg-muted/60 px-1.5 py-1 text-center align-middle">
+                      <div className="flex flex-col items-center leading-tight">
+                        <span className="text-[11px] font-semibold">{getPeriodLabel(period, timings)}</span>
+                        <span className="text-[9px] text-muted-foreground">{time}</span>
+                      </div>
+                    </td>
                     {activeDays.map((day) => {
                       const entry = entries.find((e) => e.day === day && e.period === period && e.classId === classId && e.sectionId === sectionId);
                       const teacher = entry ? teachers.find((t) => t.id === entry.teacherId) : null;
                       const subject = entry ? subjects.find((s) => s.id === entry.subjectId) : null;
                       const colors = entry ? getSubjectColor(entry.subjectId) : null;
-                      if (!entry && !showEmpty) return <div key={`${day}-${period}`} className="bg-card p-2 min-h-[48px]" />;
                       return (
-                        <div key={`${day}-${period}`} className={`p-2 min-h-[48px] flex flex-col items-center justify-center ${entry ? `${colors?.bg || ''} ${colors?.border || ''} border` : 'bg-card'}`}>
-                          {entry ? (<><span className={`text-xs font-semibold ${colors?.text || ''}`}>{subject?.shortName || '?'}</span><span className="text-[10px] text-muted-foreground">{teacher?.name}</span></>) : (<span className="text-[10px] text-muted-foreground/40">—</span>)}
-                        </div>
+                        <td key={`${day}-${period}`} className={`border border-border px-1 py-1.5 text-center align-middle min-h-[40px] ${entry ? `${colors?.bg || ''} ${colors?.border || ''}` : 'bg-card'}`}>
+                          {entry ? (
+                            <div className="flex flex-col items-center leading-tight">
+                              <span className={`text-[11px] font-semibold ${colors?.text || ''}`}>{subject?.shortName || '?'}</span>
+                              <span className="text-[9px] text-muted-foreground">{teacher?.name}</span>
+                            </div>
+                          ) : showEmpty ? (
+                            <span className="text-[10px] text-muted-foreground/30">—</span>
+                          ) : null}
+                        </td>
                       );
                     })}
-                  </div>
+                  </tr>
                 );
               })}
-            </div>
-          </div>
+            </tbody>
+          </table>
         </div>
       </CardContent>
     </Card>
@@ -1559,64 +1569,76 @@ function TeacherScheduleReport({ teacherId, showBreaks, showEmpty }: { teacherId
     return periods;
   }, [timings, showBreaks, showEmpty, activeDays, teacherEntries]);
 
+  const colCount = activeDays.length + 1;
+
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="pb-3">
         <div>
           <CardTitle className="text-lg flex items-center gap-2"><UserCheck className="h-4 w-4" />{teacher?.name}</CardTitle>
           <CardDescription>Weekly teaching schedule</CardDescription>
         </div>
       </CardHeader>
       <CardContent>
-        <div className="overflow-x-auto">
-          <div style={{ minWidth: `${100 + activeDays.length * 80}px` }}>
-            <div className="grid gap-px bg-border rounded-lg overflow-hidden" style={{ gridTemplateColumns: `100px repeat(${activeDays.length}, minmax(80px, 1fr))` }}>
-              <div className="bg-muted p-2 text-center text-xs font-medium text-muted-foreground flex items-center justify-center">Day / Period</div>
-              {activeDays.map((day) => <div key={day} className="bg-muted p-2 text-center text-xs font-medium text-muted-foreground whitespace-nowrap">{day}</div>)}
+        <div className="overflow-x-auto -mx-6 px-6">
+          <table className="w-full border-collapse text-sm" style={{ tableLayout: 'fixed' }}>
+            <thead>
+              <tr>
+                <th className="w-[72px] border border-border bg-[#1B2A4A] text-white px-1.5 py-1.5 text-center text-[11px] font-semibold">Period</th>
+                {activeDays.map((day) => (
+                  <th key={day} className="border border-border bg-[#1B2A4A] text-white px-1 py-1.5 text-center text-[11px] font-semibold">{day}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
               {visiblePeriods.map((period) => {
                 const isBreak = isBreakPeriod(period, timings);
                 const time = getPeriodTime(period, timings);
                 if (isBreak) {
                   return (
-                    <Fragment key={`brk-${period}`}>
-                      <div className="bg-amber-100 dark:bg-amber-900/20 p-2 flex flex-col items-center justify-center gap-0.5">
-                        <span className="text-xs font-medium">{getPeriodLabel(period, timings)}</span>
-                        <span className="text-[10px] text-muted-foreground">{time}</span>
-                      </div>
-                      <div
-                        className="bg-amber-50 dark:bg-amber-950/10 p-2 flex items-center justify-center gap-1.5"
-                        style={{ gridColumn: `span ${activeDays.length}` }}
-                      >
-                        <Coffee className="h-3 w-3 text-amber-400" />
-                        <span className="text-xs font-medium text-amber-500">Break</span>
-                      </div>
-                    </Fragment>
+                    <tr key={`brk-${period}`} className="bg-amber-50 dark:bg-amber-950/20">
+                      <td colSpan={colCount} className="border border-border px-2 py-1 text-center">
+                        <div className="flex items-center justify-center gap-1.5 text-amber-600 dark:text-amber-400">
+                          <Coffee className="h-3 w-3" />
+                          <span className="text-[11px] font-medium">{getPeriodLabel(period, timings)}</span>
+                          <span className="text-[10px] text-muted-foreground">({time})</span>
+                        </div>
+                      </td>
+                    </tr>
                   );
                 }
                 return (
-                  <div key={`row-${period}`}>
-                    <div className="bg-muted/50 p-2 flex flex-col items-center justify-center gap-0.5">
-                      <span className="text-xs font-medium">{getPeriodLabel(period, timings)}</span>
-                      <span className="text-[10px] text-muted-foreground">{time}</span>
-                    </div>
+                  <tr key={`row-${period}`}>
+                    <td className="border border-border bg-muted/60 px-1.5 py-1 text-center align-middle">
+                      <div className="flex flex-col items-center leading-tight">
+                        <span className="text-[11px] font-semibold">{getPeriodLabel(period, timings)}</span>
+                        <span className="text-[9px] text-muted-foreground">{time}</span>
+                      </div>
+                    </td>
                     {activeDays.map((day) => {
                       const entry = teacherEntries.find((e) => e.day === day && e.period === period);
                       const subject = entry ? subjects.find((s) => s.id === entry.subjectId) : null;
                       const cls = entry ? classes.find((c) => c.id === entry.classId) : null;
                       const sec = entry ? sections.find((s) => s.id === entry.sectionId) : null;
                       const colors = entry ? getSubjectColor(entry.subjectId) : null;
-                      if (!entry && !showEmpty) return <div key={`${day}-${period}`} className="bg-card p-2 min-h-[48px]" />;
                       return (
-                        <div key={`${day}-${period}`} className={`p-2 min-h-[48px] flex flex-col items-center justify-center ${entry ? `${colors?.bg || ''} ${colors?.border || ''} border` : 'bg-card'}`}>
-                          {entry ? (<><span className={`text-xs font-semibold ${colors?.text || ''}`}>{subject?.shortName || '?'}</span><span className="text-[10px] text-muted-foreground">{cls?.name}-{sec?.name}</span></>) : (<span className="text-[10px] text-muted-foreground/40">—</span>)}
-                        </div>
+                        <td key={`${day}-${period}`} className={`border border-border px-1 py-1.5 text-center align-middle min-h-[40px] ${entry ? `${colors?.bg || ''} ${colors?.border || ''}` : 'bg-card'}`}>
+                          {entry ? (
+                            <div className="flex flex-col items-center leading-tight">
+                              <span className={`text-[11px] font-semibold ${colors?.text || ''}`}>{subject?.shortName || '?'}</span>
+                              <span className="text-[9px] text-muted-foreground">{cls?.name}-{sec?.name}</span>
+                            </div>
+                          ) : showEmpty ? (
+                            <span className="text-[10px] text-muted-foreground/30">—</span>
+                          ) : null}
+                        </td>
                       );
                     })}
-                  </div>
+                  </tr>
                 );
               })}
-            </div>
-          </div>
+            </tbody>
+          </table>
         </div>
       </CardContent>
     </Card>
@@ -1668,6 +1690,8 @@ function DaywiseScheduleReport({
     return periods;
   }, [timings, showBreaks, showEmpty, filteredSelectedDays, entries, visibleCombos]);
 
+  const colCount = visibleCombos.length + 1;
+
   return (
     <div className="space-y-4">
       {filteredSelectedDays.map((day) => (
@@ -1682,58 +1706,64 @@ function DaywiseScheduleReport({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
-              <div style={{ minWidth: `${100 + visibleCombos.length * 80}px` }}>
-                <div className="grid gap-px bg-border rounded-lg overflow-hidden" style={{ gridTemplateColumns: `100px repeat(${visibleCombos.length}, minmax(80px, 1fr))` }}>
-                  <div className="bg-muted p-2 text-center text-xs font-medium text-muted-foreground flex items-center justify-center">Period</div>
-                  {visibleCombos.map((combo) => (
-                    <div key={combo.value} className="bg-muted p-2 text-center text-xs font-medium text-muted-foreground whitespace-nowrap overflow-hidden text-ellipsis">
-                      {combo.label}
-                    </div>
-                  ))}
+            <div className="overflow-x-auto -mx-6 px-6">
+              <table className="w-full border-collapse text-sm" style={{ tableLayout: 'fixed' }}>
+                <thead>
+                  <tr>
+                    <th className="w-[72px] border border-border bg-[#1B2A4A] text-white px-1.5 py-1.5 text-center text-[11px] font-semibold">Period</th>
+                    {visibleCombos.map((combo) => (
+                      <th key={combo.value} className="border border-border bg-[#1B2A4A] text-white px-1 py-1.5 text-center text-[11px] font-semibold whitespace-nowrap overflow-hidden text-ellipsis">{combo.label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
                   {visiblePeriods.map((period) => {
                     const isBreak = isBreakPeriod(period, timings);
                     const time = getPeriodTime(period, timings);
                     if (isBreak) {
                       return (
-                        <Fragment key={`brk-${day}-${period}`}>
-                          <div className="bg-amber-100 dark:bg-amber-900/20 p-2 flex flex-col items-center justify-center gap-0.5">
-                            <span className="text-xs font-medium">{getPeriodLabel(period, timings)}</span>
-                            <span className="text-[10px] text-muted-foreground">{time}</span>
-                          </div>
-                          <div
-                            className="bg-amber-50 dark:bg-amber-950/10 p-2 flex items-center justify-center gap-1.5"
-                            style={{ gridColumn: `span ${visibleCombos.length}` }}
-                          >
-                            <Coffee className="h-3 w-3 text-amber-400" />
-                            <span className="text-xs font-medium text-amber-500">Break</span>
-                          </div>
-                        </Fragment>
+                        <tr key={`brk-${day}-${period}`} className="bg-amber-50 dark:bg-amber-950/20">
+                          <td colSpan={colCount} className="border border-border px-2 py-1 text-center">
+                            <div className="flex items-center justify-center gap-1.5 text-amber-600 dark:text-amber-400">
+                              <Coffee className="h-3 w-3" />
+                              <span className="text-[11px] font-medium">{getPeriodLabel(period, timings)}</span>
+                              <span className="text-[10px] text-muted-foreground">({time})</span>
+                            </div>
+                          </td>
+                        </tr>
                       );
                     }
                     return (
-                      <div key={`row-${day}-${period}`}>
-                        <div className="bg-muted/50 p-2 flex flex-col items-center justify-center gap-0.5">
-                          <span className="text-xs font-medium">{getPeriodLabel(period, timings)}</span>
-                          <span className="text-[10px] text-muted-foreground">{time}</span>
-                        </div>
+                      <tr key={`row-${day}-${period}`}>
+                        <td className="border border-border bg-muted/60 px-1.5 py-1 text-center align-middle">
+                          <div className="flex flex-col items-center leading-tight">
+                            <span className="text-[11px] font-semibold">{getPeriodLabel(period, timings)}</span>
+                            <span className="text-[9px] text-muted-foreground">{time}</span>
+                          </div>
+                        </td>
                         {visibleCombos.map((combo) => {
                           const entry = entries.find((e) => e.day === day && e.period === period && e.classId === combo.classId && e.sectionId === combo.sectionId);
                           const teacher = entry ? teachers.find((t) => t.id === entry.teacherId) : null;
                           const subject = entry ? subjects.find((s) => s.id === entry.subjectId) : null;
                           const colors = entry ? getSubjectColor(entry.subjectId) : null;
-                          if (!entry && !showEmpty) return <div key={`${combo.value}-${period}`} className="bg-card p-2 min-h-[48px]" />;
                           return (
-                            <div key={`${combo.value}-${period}`} className={`p-2 min-h-[48px] flex flex-col items-center justify-center ${entry ? `${colors?.bg || ''} ${colors?.border || ''} border` : 'bg-card'}`}>
-                              {entry ? (<><span className={`text-xs font-semibold ${colors?.text || ''}`}>{subject?.shortName || '?'}</span><span className="text-[10px] text-muted-foreground">{teacher?.name}</span></>) : (<span className="text-[10px] text-muted-foreground/40">—</span>)}
-                            </div>
+                            <td key={`${combo.value}-${period}`} className={`border border-border px-1 py-1.5 text-center align-middle min-h-[40px] ${entry ? `${colors?.bg || ''} ${colors?.border || ''}` : 'bg-card'}`}>
+                              {entry ? (
+                                <div className="flex flex-col items-center leading-tight">
+                                  <span className={`text-[11px] font-semibold ${colors?.text || ''}`}>{subject?.shortName || '?'}</span>
+                                  <span className="text-[9px] text-muted-foreground">{teacher?.name}</span>
+                                </div>
+                              ) : showEmpty ? (
+                                <span className="text-[10px] text-muted-foreground/30">—</span>
+                              ) : null}
+                            </td>
                           );
                         })}
-                      </div>
+                      </tr>
                     );
                   })}
-                </div>
-              </div>
+                </tbody>
+              </table>
             </div>
           </CardContent>
         </Card>
