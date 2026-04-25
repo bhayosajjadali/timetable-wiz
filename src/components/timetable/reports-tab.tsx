@@ -174,7 +174,7 @@ export function ReportsTab() {
   const { toast } = useToast();
   const { downloadPdf, isGenerating } = usePdfDownload();
 
-  const { classes, sections, teachers, timings, schoolName } = useTimetableStore();
+  const { classes, sections, teachers, timings } = useTimetableStore();
   const availableClasses = classes.filter((c) => c.sectionIds.length > 0);
 
   // ── Helpers ──
@@ -325,24 +325,7 @@ export function ReportsTab() {
       console.error('Export failed:', err);
       toast({ title: 'Export failed', description: 'An error occurred. Please try again.', variant: 'destructive' });
     }
-  }, [
-    exportType,
-    exportShowBreaks,
-    exportShowEmpty,
-    exportOrientation,
-    exportSheetsPerPage,
-    exportHeaderContent,
-    exportFooterContent,
-    exportSelectedClasses,
-    exportSelectedTeachers,
-    exportSelectedDays,
-    exportDetailMode,
-    exportDaywiseDays,
-    exportDaywiseClasses,
-    classSectionOpts,
-    toast,
-    downloadPdf,
-  ]);
+  }, [exportType, exportShowBreaks, exportShowEmpty, exportOrientation, exportSheetsPerPage, exportHeaderContent, exportFooterContent, exportSelectedClasses, exportSelectedTeachers, exportSelectedDays, exportDetailMode, exportDaywiseDays, exportDaywiseClasses, classSectionOpts, exportSettings, toast, downloadPdf]);
 
   // ── PDF Export summary text ──
   const exportSummary = useMemo(() => {
@@ -375,20 +358,7 @@ export function ReportsTab() {
     parts.push(exportOrientation === 'landscape' ? 'Landscape' : 'Portrait');
     parts.push(`${exportSheetsPerPage} sheet${exportSheetsPerPage !== 1 ? 's' : ''}/page`);
     return parts.join(', ');
-  }, [
-    exportType,
-    exportSelectedClasses,
-    exportSelectedTeachers,
-    exportSelectedDays,
-    exportDetailMode,
-    exportDaywiseDays,
-    exportDaywiseClasses,
-    exportOrientation,
-    exportSheetsPerPage,
-    classSectionOpts,
-    teachers,
-    timings,
-  ]);
+  }, [exportType, exportSelectedClasses, exportSelectedTeachers, exportSelectedDays, exportDetailMode, exportDaywiseDays, exportDaywiseClasses, exportOrientation, exportSheetsPerPage, classSectionOpts, teachers, timings.days]);
 
   return (
     <div className="space-y-4">
@@ -408,9 +378,9 @@ export function ReportsTab() {
           </TabsTrigger>
         </TabsList>
 
-        {/* ══════════════════════════════════════════════════════════════
+        {/* ═══════════════════════════════════════════════════════════════
             Tab 1: Timetables
-            ══════════════════════════════════════════════════════════════ */}
+            ═══════════════════════════════════════════════════════════════ */}
         <TabsContent value="timetables">
           {/* View mode toggle + global filters */}
           <Card>
@@ -562,16 +532,16 @@ export function ReportsTab() {
           )}
         </TabsContent>
 
-        {/* ══════════════════════════════════════════════════════════════
+        {/* ═══════════════════════════════════════════════════════════════
             Tab 2: Period Count
-            ══════════════════════════════════════════════════════════════ */}
+            ═══════════════════════════════════════════════════════════════ */}
         <TabsContent value="period-count">
           <TeacherPeriodCountReport />
         </TabsContent>
 
-        {/* ══════════════════════════════════════════════════════════════
+        {/* ═══════════════════════════════════════════════════════════════
             Tab 3: PDF Export
-            ══════════════════════════════════════════════════════════════ */}
+            ═══════════════════════════════════════════════════════════════ */}
         <TabsContent value="pdf-export">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* ── Left: Configuration ── */}
@@ -1178,7 +1148,7 @@ function buildPeriodCountReportHtml(params: {
 
       const isFirstOnPage = ci % tablesPerPage === 0;
       const chunkHeaderHtml = isFirstOnPage
-        ? `<div class="report-header"><div class="school-name">${esc(schoolName)}</div><div class="report-title">Teacher Period Count Report</div><div class="report-subtitle">${esc(daysLabel)} | Max ${maxPossiblePerTeacher} periods/teacher | ${teachersCount} teachers</div>${customHeaderHtml}</div>`
+        ? `<div class="report-header"><div class="school-name">${esc(schoolName)}</div><div class="report-title">Teacher Period Count Report</div><div class="report-subtitle">${esc(daysLabel)} | Max ${maxPossiblePerTeacher} periods/teacher | ${teachersCount} teachers</div>${ci === 0 ? customHeaderHtml : ''}</div>`
         : `<div class="sheet-label-pc">Part ${ci + 1} — ${esc(daysLabel)}</div>`;
 
       tablesHtml += `
@@ -1195,7 +1165,9 @@ function buildPeriodCountReportHtml(params: {
       if (detailMode === 'show-periods') {
         tablesHtml += '<th class="th-detail">Periods</th>';
       }
-      tablesHtml += `</tr></thead><tbody>${tableRows}</tbody></table>
+      tablesHtml += `</tr></thead>
+            <tbody>${tableRows}</tbody>
+          </table>
         </div>`;
     });
   }
@@ -1207,17 +1179,19 @@ function buildPeriodCountReportHtml(params: {
 <head>
 <meta charset="utf-8">
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700;800&display=swap');
   @page {
     size: A4 ${isLandscape ? 'landscape' : 'portrait'};
     margin: 10mm 10mm 14mm 10mm;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
-    font-family: Georgia, 'Times New Roman', 'Noto Serif', serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     font-size: ${fontSize};
-    line-height: 1.4;
-    color: #1D1D1F;
+    line-height: 1.45;
+    color: #1E293B;
     background: #fff;
+    -webkit-font-smoothing: antialiased;
   }
   ${tablesPerPage > 1 ? `
   body.sheets-multi-pc {
@@ -1233,12 +1207,13 @@ function buildPeriodCountReportHtml(params: {
     min-height: 0;
     page-break-inside: avoid;
     break-inside: avoid;
-    border: 1px solid #CBD5E0;
-    border-radius: 4px;
+    border: 1px solid #B8C5D6;
+    border-radius: 5px;
     padding: 4px 6px;
     margin-bottom: 3px;
     overflow: hidden;
     contain: layout paint;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
   }
   body.sheets-multi-pc .sheet-slot:nth-child(${tablesPerPage}n) {
     page-break-after: always;
@@ -1256,7 +1231,7 @@ function buildPeriodCountReportHtml(params: {
     text-align: center;
     padding-bottom: 6px;
     margin-bottom: 8px;
-    border-bottom: 2.5px solid #2C5282;
+    border-bottom: 2.5px solid #1E40AF;
     position: relative;
   }
   .report-header::after {
@@ -1264,43 +1239,43 @@ function buildPeriodCountReportHtml(params: {
     display: block;
     margin-top: 3px;
     height: 1.5px;
-    background: linear-gradient(to right, transparent, #2C5282, transparent);
+    background: linear-gradient(to right, transparent, #3B82F6, transparent);
   }
   .school-name {
     font-size: ${isLandscape ? '17px' : '15px'};
-    font-weight: 700;
-    color: #1B2A4A;
-    letter-spacing: 0.8px;
-    font-family: Georgia, 'Times New Roman', serif;
+    font-weight: 800;
+    color: #0F172A;
+    letter-spacing: 0.5px;
+    font-family: 'Playfair Display', Georgia, 'Times New Roman', serif;
   }
   .report-title {
     font-size: ${isLandscape ? '12px' : '11px'};
     font-weight: 600;
-    color: #2D3748;
+    color: #1E40AF;
     margin-top: 2px;
-    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-family: 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   }
   .report-subtitle {
     font-size: ${headerFontSize};
-    color: #718096;
+    color: #64748B;
     margin-top: 1px;
-    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-family: 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   }
   .custom-header {
     text-align: center;
     font-size: ${headerFontSize};
-    color: #718096;
+    color: #64748B;
     font-style: italic;
     margin-bottom: 4px;
-    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-family: 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   }
   .custom-footer {
     text-align: center;
     font-size: ${headerFontSize};
-    color: #718096;
+    color: #64748B;
     font-style: italic;
     margin-top: 4px;
-    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-family: 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   }
 
   /* ── Period Count Table ── */
@@ -1309,11 +1284,11 @@ function buildPeriodCountReportHtml(params: {
     border-collapse: collapse;
     font-size: ${fontSize};
     table-layout: fixed;
-    border: 1.5px solid #2C5282;
-    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    border: 1.5px solid #1E40AF;
+    font-family: 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   }
   .pc-table th, .pc-table td {
-    border: 0.5px solid #CBD5E0;
+    border: 0.5px solid #CBD5E1;
     padding: ${cellPad};
     text-align: center;
     vertical-align: middle;
@@ -1322,14 +1297,14 @@ function buildPeriodCountReportHtml(params: {
   /* ── Table Headers ── */
   .th-sno {
     width: 22px;
-    background: linear-gradient(180deg, #4A5568 0%, #2D3748 100%);
+    background: linear-gradient(180deg, #475569 0%, #1E293B 100%);
     color: #fff;
     font-size: ${headerFontSize};
     font-weight: 600;
     text-shadow: 0 1px 1px rgba(0,0,0,0.1);
   }
   .th-name {
-    background: linear-gradient(180deg, #2C5282 0%, #1B2A4A 100%);
+    background: linear-gradient(180deg, #2563EB 0%, #1E3A8A 100%);
     color: #fff;
     font-size: ${headerFontSize};
     font-weight: 600;
@@ -1339,14 +1314,14 @@ function buildPeriodCountReportHtml(params: {
     letter-spacing: 0.5px;
   }
   .th-short {
-    background: linear-gradient(180deg, #2C5282 0%, #1B2A4A 100%);
+    background: linear-gradient(180deg, #2563EB 0%, #1E3A8A 100%);
     color: #fff;
     font-size: ${headerFontSize};
     font-weight: 600;
     width: 40px;
   }
   .th-day {
-    background: linear-gradient(180deg, #2C5282 0%, #1B2A4A 100%);
+    background: linear-gradient(180deg, #2563EB 0%, #1E3A8A 100%);
     color: #fff;
     font-size: ${headerFontSize};
     font-weight: 600;
@@ -1354,14 +1329,14 @@ function buildPeriodCountReportHtml(params: {
     letter-spacing: 0.5px;
   }
   .th-total {
-    background: linear-gradient(180deg, #2C5282 0%, #1B2A4A 100%);
+    background: linear-gradient(180deg, #2563EB 0%, #1E3A8A 100%);
     color: white;
     font-size: ${headerFontSize};
     font-weight: 700;
     width: 36px;
   }
   .th-detail {
-    background: linear-gradient(180deg, #2C5282 0%, #1B2A4A 100%);
+    background: linear-gradient(180deg, #2563EB 0%, #1E3A8A 100%);
     color: #fff;
     font-size: ${headerFontSize};
     font-weight: 600;
@@ -1371,8 +1346,8 @@ function buildPeriodCountReportHtml(params: {
   /* ── Data cells ── */
   .td-sno {
     font-size: ${headerFontSize};
-    color: #A0AEC0;
-    background: #EDF2F7;
+    color: #94A3B8;
+    background: #F1F5F9;
   }
   .td-name {
     text-align: left !important;
@@ -1380,14 +1355,14 @@ function buildPeriodCountReportHtml(params: {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    color: #2D3748;
+    color: #1E293B;
     letter-spacing: 0.2px;
   }
   .td-short {
     font-weight: 600;
     font-size: ${fontSize};
-    background: #EDF2F7;
-    color: #4A5568;
+    background: #F1F5F9;
+    color: #475569;
   }
   .td-num {
     font-weight: 700;
@@ -1395,25 +1370,25 @@ function buildPeriodCountReportHtml(params: {
     letter-spacing: 0.3px;
   }
   .td-num.zero {
-    background: linear-gradient(135deg, #FFF5F5 0%, #FED7D7 100%);
-    color: #9B2C2C;
+    background: linear-gradient(135deg, #FEF2F2 0%, #FECACA 100%);
+    color: #991B1B;
     font-weight: 800;
   }
   .td-num.full {
-    background: linear-gradient(135deg, #F0FFF4 0%, #C6F6D5 100%);
-    color: #22543D;
+    background: linear-gradient(135deg, #ECFDF5 0%, #A7F3D0 100%);
+    color: #065F46;
   }
   .td-total {
-    background: linear-gradient(135deg, #EBF8FF 0%, #BEE3F8 100%);
+    background: linear-gradient(135deg, #EFF6FF 0%, #BFDBFE 100%);
     font-size: ${fontSize};
     font-weight: 800;
-    color: #1B2A4A;
-    border-left: 1.5px solid #2C5282 !important;
+    color: #0F172A;
+    border-left: 1.5px solid #1E40AF !important;
   }
   .td-detail {
     text-align: left !important;
     font-size: ${headerFontSize};
-    color: #718096;
+    color: #64748B;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1424,24 +1399,24 @@ function buildPeriodCountReportHtml(params: {
   /* ── Alternating rows ── */
   .pc-table tbody tr:nth-child(even) .td-name,
   .pc-table tbody tr:nth-child(even) .td-num,
-  .pc-table tbody tr:nth-child(even) .td-detail { background: #F7FAFC; }
+  .pc-table tbody tr:nth-child(even) .td-detail { background: #F8FAFC; }
   .pc-table tbody tr:nth-child(even) .td-sno,
   .pc-table tbody tr:nth-child(even) .td-short { background: #E2E8F0; }
 
   .table-chunk { padding: 0 4px; }
-  .chunk-title { font-size: ${headerFontSize}; font-weight: 600; text-align: center; margin-bottom: 3px; color: #1B2A4A; }
+  .chunk-title { font-size: ${headerFontSize}; font-weight: 600; text-align: center; margin-bottom: 3px; color: #0F172A; }
 
   .sheet-slot { width: 100%; page-break-inside: avoid; break-inside: avoid; }
   .sheet-label-pc {
     text-align: center;
     padding: 2px 0 3px;
     margin-bottom: 3px;
-    border-bottom: 2px solid #2C5282;
+    border-bottom: 2px solid #3B82F6;
     font-size: ${headerFontSize};
     font-weight: 600;
-    color: #1B2A4A;
+    color: #0F172A;
     letter-spacing: 0.5px;
-    font-family: Georgia, 'Times New Roman', serif;
+    font-family: 'Playfair Display', Georgia, 'Times New Roman', serif;
   }
 
   /* ── Summary bar ── */
@@ -1449,38 +1424,38 @@ function buildPeriodCountReportHtml(params: {
   .summary-item {
     text-align: center;
     padding: 4px 12px;
-    background: linear-gradient(135deg, #F7FAFC 0%, #EDF2F7 100%);
-    border-radius: 6px;
-    border: 1px solid #CBD5E0;
-    border-top: 2px solid #2C5282;
+    background: linear-gradient(135deg, #F8FAFC 0%, #EFF6FF 100%);
+    border-radius: 8px;
+    border: 1px solid #BFDBFE;
+    border-top: 2px solid #2563EB;
   }
   .summary-num {
     display: block;
     font-size: 14px;
-    font-weight: 700;
-    color: #1B2A4A;
-    font-family: Georgia, serif;
+    font-weight: 800;
+    color: #0F172A;
+    font-family: 'Playfair Display', Georgia, serif;
   }
   .summary-label {
     display: block;
     font-size: ${headerFontSize};
-    color: #718096;
+    color: #64748B;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    font-family: 'Segoe UI', sans-serif;
+    font-family: 'Inter', sans-serif;
   }
 
   .report-footer {
     margin-top: 10px;
     padding-top: 6px;
-    border-top: 1.5px solid #CBD5E0;
+    border-top: 1.5px solid #CBD5E1;
     display: flex;
     justify-content: space-between;
     font-size: ${headerFontSize};
-    color: #A0AEC0;
-    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    color: #94A3B8;
+    font-family: 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   }
-  .watermark { font-size: 7px; color: #CBD5E0; font-style: italic; }
+  .watermark { font-size: 7px; color: #CBD5E1; font-style: italic; }
 
   @media print {
     body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -2075,24 +2050,24 @@ function esc(str: string): string {
 
 /* ---------- Shared professional CSS for timetable grid reports ---------- */
 
-/* Print-safe pastel palette for subject cells */
+/* Print-safe pastel palette for subject cells — vibrant yet readable */
 const SUBJECT_COLORS: { bg: string; fg: string; border: string }[] = [
-  { bg: '#EDE7F6', fg: '#4527A0', border: '#CE93D8' },  // Lavender
-  { bg: '#E3F2FD', fg: '#0D47A1', border: '#90CAF9' },  // Sky Blue
-  { bg: '#E8F5E9', fg: '#1B5E20', border: '#A5D6A7' },  // Mint Green
-  { bg: '#FFF3E0', fg: '#BF360C', border: '#FFCC80' },  // Peach
-  { bg: '#FCE4EC', fg: '#880E4F', border: '#F48FB1' },  // Rose
-  { bg: '#E0F2F1', fg: '#004D40', border: '#80CBC4' },  // Teal
-  { bg: '#FFF8E1', fg: '#F57F17', border: '#FFE082' },  // Amber
-  { bg: '#E8EAF6', fg: '#1A237E', border: '#9FA8DA' },  // Indigo
-  { bg: '#FBE9E7', fg: '#BF360C', border: '#FFAB91' },  // Coral
+  { bg: '#E8D5F5', fg: '#4A148C', border: '#BA68C8' },  // Violet
+  { bg: '#D4ECFC', fg: '#0A3D91', border: '#64B5F6' },  // Sky Blue
+  { bg: '#D5F0D8', fg: '#1B5E20', border: '#81C784' },  // Green
+  { bg: '#FFECD2', fg: '#BF360C', border: '#FFB74D' },  // Peach
+  { bg: '#FDE4ED', fg: '#880E4F', border: '#F06292' },  // Rose
+  { bg: '#CCFBF1', fg: '#004D40', border: '#4DB6AC' },  // Teal
+  { bg: '#FFF3CC', fg: '#E65100', border: '#FFB300' },  // Amber
+  { bg: '#DDE4F7', fg: '#1A237E', border: '#7986CB' },  // Indigo
+  { bg: '#FFE0D6', fg: '#BF360C', border: '#FF8A65' },  // Coral
+  { bg: '#E8F5D6', fg: '#33691E', border: '#9CCC65' },  // Lime
+  { bg: '#E0F7FA', fg: '#006064', border: '#26C6DA' },  // Cyan
+  { bg: '#FFF9C4', fg: '#827717', border: '#DCE775' },  // Yellow
+  { bg: '#F3E5F5', fg: '#6A1B9A', border: '#AB47BC' },  // Purple
+  { bg: '#E1F5FE', fg: '#01579B', border: '#29B6F6' },  // Light Blue
   { bg: '#F1F8E9', fg: '#33691E', border: '#AED581' },  // Sage
-  { bg: '#E0F7FA', fg: '#006064', border: '#80DEEA' },  // Cyan
-  { bg: '#FFF9C4', fg: '#827717', border: '#FFF176' },  // Lime
-  { bg: '#F3E5F5', fg: '#6A1B9A', border: '#CE93D8' },  // Purple
-  { bg: '#E8EAF6', fg: '#283593', border: '#9FA8DA' },  // Deep Indigo
-  { bg: '#EFEBE9', fg: '#3E2723', border: '#BCAAA4' },  // Warm Gray
-  { bg: '#ECEFF1', fg: '#263238', border: '#B0BEC5' },  // Cool Gray
+  { bg: '#ECEFF1', fg: '#263238', border: '#90A4AE' },  // Blue Gray
 ];
 
 function getSubjectPrintColor(subjectId: string): { bg: string; fg: string; border: string } {
@@ -2105,6 +2080,9 @@ function getSubjectPrintColor(subjectId: string): { bg: string; fg: string; bord
 }
 
 function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string {
+  /* Google Fonts import for professional typography */
+  const fontImport = `@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700;800&display=swap');`;
+
   const nUpCss = sheetsPerPage > 1 ? `
   body.sheets-multi {
     display: flex;
@@ -2119,12 +2097,13 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
     min-height: 0;
     page-break-inside: avoid;
     break-inside: avoid;
-    border: 1px solid #D1D1D6;
-    border-radius: 4px;
+    border: 1px solid #B8C5D6;
+    border-radius: 5px;
     padding: 6px 8px;
     margin-bottom: 3px;
     overflow: hidden;
     contain: layout paint;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
   }
   body.sheets-multi .sheet-slot:nth-child(${sheetsPerPage}n) {
     page-break-after: always;
@@ -2137,6 +2116,7 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
   }` : '\n  body.sheets-multi .sheet-slot { width: 100%; }';
 
   return `
+  ${fontImport}
   @page {
     size: A4 ${isLandscape ? 'landscape' : 'portrait'};
     margin: 10mm 10mm 14mm 10mm;
@@ -2145,11 +2125,12 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
 
   /* ── Fonts ── */
   body {
-    font-family: Georgia, 'Times New Roman', 'Noto Serif', serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     font-size: 9.5px;
-    line-height: 1.4;
-    color: #1D1D1F;
+    line-height: 1.45;
+    color: #1E293B;
     background: #fff;
+    -webkit-font-smoothing: antialiased;
   }
 
   ${nUpCss}
@@ -2188,37 +2169,37 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
   .page-header .header-bar {
     width: 100%;
     height: 3px;
-    background: linear-gradient(to right, transparent 2%, #1B2A4A 20%, #2C5282 50%, #1B2A4A 80%, transparent 98%);
+    background: linear-gradient(to right, transparent 2%, #1E40AF 15%, #3B82F6 35%, #6366F1 50%, #3B82F6 65%, #1E40AF 85%, transparent 98%);
     border-radius: 2px;
     margin-bottom: 6px;
   }
   .page-header .school-name {
     font-size: 17px;
-    font-weight: 700;
-    color: #1B2A4A;
-    letter-spacing: 0.8px;
-    font-family: Georgia, 'Times New Roman', serif;
+    font-weight: 800;
+    color: #0F172A;
+    letter-spacing: 0.5px;
+    font-family: 'Playfair Display', Georgia, 'Times New Roman', serif;
   }
   .page-header .report-title {
     font-size: 11px;
     font-weight: 600;
-    color: #2D3748;
+    color: #1E40AF;
     margin-top: 2px;
-    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-family: 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   }
   .page-header .report-sub {
     font-size: 9px;
-    color: #718096;
+    color: #64748B;
     margin-top: 1px;
-    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-family: 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   }
   .custom-header {
     text-align: center;
     font-size: 8px;
-    color: #718096;
+    color: #64748B;
     font-style: italic;
     margin-top: 3px;
-    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-family: 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   }
 
   /* ── Compact sheet label ── */
@@ -2226,19 +2207,19 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
     text-align: center;
     padding: 2px 0 4px;
     margin-bottom: 4px;
-    border-bottom: 2px solid #2C5282;
+    border-bottom: 2px solid #3B82F6;
   }
   .sheet-label-title {
     font-size: 10px;
     font-weight: 700;
-    color: #1B2A4A;
+    color: #0F172A;
     letter-spacing: 0.5px;
-    font-family: Georgia, 'Times New Roman', serif;
+    font-family: 'Playfair Display', Georgia, 'Times New Roman', serif;
   }
   .sheet-label-sub {
     font-size: 7.5px;
-    color: #718096;
-    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    color: #64748B;
+    font-family: 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   }
 
   /* ── Footer ── */
@@ -2247,36 +2228,36 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
     bottom: 0; left: 0; right: 0;
     display: table;
     width: 100%;
-    border-top: 1.5px solid #CBD5E0;
+    border-top: 1.5px solid #CBD5E1;
     padding-top: 3px;
     font-size: 6.5px;
-    color: #A0AEC0;
-    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    color: #94A3B8;
+    font-family: 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   }
   .page-footer .f-left   { display: table-cell; text-align: left;   width: 33%; padding: 0 6px; }
   .page-footer .f-center { display: table-cell; text-align: center; width: 34%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .page-footer .f-right  { display: table-cell; text-align: right;  width: 33%; padding: 0 6px; }
-  .watermark { color: #CBD5E0; font-style: italic; letter-spacing: 0.3px; }
+  .watermark { color: #CBD5E1; font-style: italic; letter-spacing: 0.3px; }
   .custom-footer {
     text-align: center;
     font-size: 7.5px;
-    color: #718096;
+    color: #64748B;
     font-style: italic;
     margin-top: 6px;
-    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-family: 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   }
 
   /* ── Timetable grid ── */
   table.tt {
     width: 100%;
     border-collapse: collapse;
-    border: 1.5px solid #2C5282;
-    border-radius: 3px;
+    border: 1.5px solid #1E40AF;
+    border-radius: 4px;
     overflow: hidden;
-    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-family: 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   }
   table.tt th, table.tt td {
-    border: 0.5px solid #CBD5E0;
+    border: 0.5px solid #CBD5E1;
     padding: 3px 2px;
     text-align: center;
     vertical-align: middle;
@@ -2284,39 +2265,39 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
 
   /* ── Table header row ── */
   table.tt th {
-    background: linear-gradient(180deg, #2C5282 0%, #1B2A4A 100%);
+    background: linear-gradient(180deg, #2563EB 0%, #1E3A8A 100%);
     font-size: 7.5px;
     font-weight: 700;
     color: #fff;
     letter-spacing: 0.5px;
     text-transform: uppercase;
     padding: 4px 3px;
-    text-shadow: 0 1px 1px rgba(0,0,0,0.15);
+    text-shadow: 0 1px 2px rgba(0,0,0,0.2);
   }
   table.tt th:first-child {
-    background: linear-gradient(180deg, #4A5568 0%, #2D3748 100%);
+    background: linear-gradient(180deg, #475569 0%, #1E293B 100%);
   }
 
   /* ── Period label column ── */
   .tp {
-    background: #EDF2F7 !important;
+    background: #F1F5F9 !important;
     font-size: 7.5px;
     width: 66px;
     min-width: 66px;
-    border-right: 1.5px solid #A0AEC0 !important;
+    border-right: 1.5px solid #94A3B8 !important;
   }
   .pl {
     display: block;
     font-weight: 700;
-    color: #2D3748;
+    color: #1E293B;
     font-size: 7.5px;
   }
   .tt-time {
     display: block;
     font-size: 5.5px;
-    color: #A0AEC0;
+    color: #64748B;
     margin-top: 0.5px;
-    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-family: 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   }
 
   /* ── Subject cells (filled) ── */
@@ -2331,26 +2312,25 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
   .tn {
     display: block;
     font-size: 6px;
-    color: #4A5568;
+    color: #475569;
     margin-top: 0.5px;
-    font-weight: 400;
+    font-weight: 500;
     font-style: italic;
-    opacity: 0.85;
+    opacity: 0.8;
   }
 
   /* ── Break rows ── */
   .tb {
     font-size: 8px;
-    color: #9C4221;
-    background: linear-gradient(135deg, #FEFCBF 0%, #FAF089 50%, #F6E05E 100%) !important;
+    color: #92400E;
+    background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 50%, #FCD34D 100%) !important;
     font-style: italic;
     font-weight: 600;
     letter-spacing: 0.5px;
-    text-shadow: 0 0.5px 0 rgba(0,0,0,0.04);
   }
   .brk td {
-    background: linear-gradient(135deg, #FEFCBF 0%, #FAF089 50%, #F6E05E 100%) !important;
-    border-color: #ECC94B !important;
+    background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 50%, #FCD34D 100%) !important;
+    border-color: #F59E0B !important;
   }
 
   /* ── Empty cells ── */
@@ -2358,7 +2338,7 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
 
   /* ── Alternating row striping ── */
   table.tt tbody tr:nth-child(even) td.te,
-  table.tt tbody tr:nth-child(even) td.tf { background: #F7FAFC; }
+  table.tt tbody tr:nth-child(even) td.tf { background: #F8FAFC; }
   table.tt tbody tr:nth-child(even) td.tp { background: #E2E8F0 !important; }
 
   /* ── Summary stats ── */
@@ -2366,43 +2346,44 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
   .si {
     text-align: center;
     padding: 6px 16px;
-    background: linear-gradient(135deg, #F7FAFC 0%, #EDF2F7 100%);
-    border-radius: 6px;
-    border: 1px solid #CBD5E0;
-    border-top: 2.5px solid #2C5282;
+    background: linear-gradient(135deg, #F8FAFC 0%, #EFF6FF 100%);
+    border-radius: 8px;
+    border: 1px solid #BFDBFE;
+    border-top: 2.5px solid #2563EB;
   }
-  .sn2 { display: block; font-size: 18px; font-weight: 700; color: #1B2A4A; font-family: Georgia, serif; }
-  .sl { display: block; font-size: 7px; color: #718096; margin-top: 1px; text-transform: uppercase; letter-spacing: 0.5px; font-family: 'Segoe UI', sans-serif; }
+  .sn2 { display: block; font-size: 18px; font-weight: 800; color: #0F172A; font-family: 'Playfair Display', Georgia, serif; }
+  .sl { display: block; font-size: 7px; color: #64748B; margin-top: 1px; text-transform: uppercase; letter-spacing: 0.5px; font-family: 'Inter', sans-serif; }
 
   /* ── Cover page ── */
   .cover-page { text-align: center; padding: 40px 20px; page-break-after: always; break-after: page; }
-  .cover-page .cover-school { font-size: 26px; font-weight: 700; color: #1B2A4A; margin-bottom: 8px; letter-spacing: 1px; }
-  .cover-page .cover-title { font-size: 16px; font-weight: 600; color: #4A5568; margin-bottom: 6px; }
-  .cover-page .cover-date { font-size: 11px; color: #A0AEC0; margin-bottom: 20px; }
+  .cover-page .cover-school { font-size: 26px; font-weight: 800; color: #0F172A; margin-bottom: 8px; letter-spacing: 0.5px; font-family: 'Playfair Display', Georgia, serif; }
+  .cover-page .cover-title { font-size: 16px; font-weight: 600; color: #1E40AF; margin-bottom: 6px; font-family: 'Inter', sans-serif; }
+  .cover-page .cover-date { font-size: 11px; color: #94A3B8; margin-bottom: 20px; }
   .cover-page .cover-list { text-align: left; display: inline-block; max-width: 400px; }
-  .cover-page .cover-item { padding: 4px 0; font-size: 10px; color: #718096; border-bottom: 1px solid #EDF2F7; }
+  .cover-page .cover-item { padding: 4px 0; font-size: 10px; color: #64748B; border-bottom: 1px solid #E2E8F0; }
 
   /* ── Day blocks ── */
-  .db { margin-bottom: 8px; border: 1px solid #CBD5E0; border-radius: 6px; overflow: hidden; border-left: 3px solid #2C5282; }
+  .db { margin-bottom: 8px; border: 1px solid #CBD5E1; border-radius: 6px; overflow: hidden; border-left: 3.5px solid #3B82F6; }
   .dh {
-    background: linear-gradient(135deg, #2C5282 0%, #1B2A4A 100%);
+    background: linear-gradient(135deg, #2563EB 0%, #1E3A8A 100%);
     padding: 5px 8px;
     font-weight: 700;
     font-size: 9.5px;
     color: #fff;
     letter-spacing: 0.5px;
     text-transform: uppercase;
+    font-family: 'Inter', sans-serif;
   }
-  .fc { font-weight: 400; font-size: 7px; color: #CBD5E0; margin-left: 5px; text-transform: none; letter-spacing: 0; }
+  .fc { font-weight: 500; font-size: 7px; color: #BFDBFE; margin-left: 5px; text-transform: none; letter-spacing: 0; }
   .di { display: flex; flex-wrap: wrap; gap: 5px; padding: 6px 8px; }
   .fi {
     padding: 3px 8px;
-    background: linear-gradient(135deg, #F0FFF4 0%, #C6F6D5 100%);
-    border: 1px solid #9AE6B4;
+    background: linear-gradient(135deg, #ECFDF5 0%, #A7F3D0 100%);
+    border: 1px solid #6EE7B7;
     border-radius: 10px;
     font-size: 7.5px;
     font-weight: 600;
-    color: #22543D;
+    color: #065F46;
     letter-spacing: 0.3px;
   }
 
@@ -2441,4 +2422,461 @@ function buildCombinedClassTimetableHtml(
     const cls = classes.find((c) => c.id === combo.classId);
     const sec = sections.find((s) => s.id === combo.sectionId);
     const filteredEntries = entries.filter((e) => e.classId === combo.classId && e.sectionId === combo.sectionId);
-    const subtitle = `${cls?.name || ''} — ${sec
+    const subtitle = `${cls?.name || ''} — ${sec?.name || ''}`;
+    const isFirstOnPage = idx % s.sheetsPerPage === 0;
+    const customHeaderHtml = s.headerContent && isFirstOnPage ? `<div class="custom-header">${esc(s.headerContent)}</div>` : '';
+
+    const getS = (id: string) => subjects.find((s) => s.id === id);
+    const getT = (id: string) => teachers.find((t) => t.id === id);
+
+    let rows = '';
+    for (let p = 1; p <= timings.periodsPerDay; p++) {
+      const isBreak = isBreakPeriod(p, timings);
+      if (isBreak && !showBreaks) continue;
+      const time = getPeriodTime(p, timings);
+      const label = getPeriodLabel(p, timings);
+      const rowClass = isBreak ? ' class="brk"' : '';
+      rows += `<tr${rowClass}><td class="tp"><span class="pl">${esc(label)}</span><span class="tt-time">${esc(time)}</span></td>`;
+      if (isBreak) {
+        rows += `<td class="tb" colspan="${activeDays.length}" style="text-align:center;">&#9749; Break</td>`;
+        rows += '</tr>';
+        continue;
+      }
+      for (const day of activeDays) {
+        const entry = filteredEntries.find((e) => e.day === day && e.period === p);
+        if (entry) {
+          const subj = getS(entry.subjectId);
+          const tchr = getT(entry.teacherId);
+          const sc = getSubjectPrintColor(entry.subjectId);
+          rows += `<td class="tf" style="background:${sc.bg};color:${sc.fg};border-left:2px solid ${sc.border};"><b>${esc(subj?.shortName || '?')}</b><span class="tn" style="color:${sc.fg};opacity:0.7;">${esc(tchr?.name || '?')}</span></td>`;
+        } else if (showEmpty) {
+          rows += '<td class="te">\u2014</td>';
+        } else {
+          rows += '<td></td>';
+        }
+      }
+      rows += '</tr>';
+    }
+
+    if (s.sheetsPerPage > 1) {
+      // Multi-sheet mode: only generate the correct header type for this position
+      const headerHtml = isFirstOnPage
+        ? `<div class="page-header"><div class="header-bar"></div><div class="school-name">${esc(schoolName)}</div><div class="report-title">${esc(reportTitle)}</div><div class="report-sub">${esc(subtitle)}</div>${customHeaderHtml}</div>`
+        : `<div class="sheet-label"><div class="sheet-label-title">${esc(reportTitle)}</div><div class="sheet-label-sub">${esc(subtitle)}</div></div>`;
+      timetablesHtml += `
+    <div class="sheet-slot">
+      ${headerHtml}
+      <table class="tt">
+        <thead><tr><th>Day / Period</th>${activeDays.map((d: string) => `<th>${esc(d)}</th>`).join('')}</tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+    } else {
+      // Single sheet per page — each timetable on its own page
+      timetablesHtml += `
+    <div class="timetable-page">
+      <div class="page-header">
+        <div class="header-bar"></div>
+        <div class="school-name">${esc(schoolName)}</div>
+        <div class="report-title">${esc(reportTitle)}</div>
+        <div class="report-sub">${esc(subtitle)}</div>
+        ${customHeaderHtml}
+      </div>
+      <table class="tt">
+        <thead><tr><th>Day / Period</th>${activeDays.map((d: string) => `<th>${esc(d)}</th>`).join('')}</tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+    }
+  }
+
+  const customFooterHtml = s.footerContent ? `<div class="custom-footer">${esc(s.footerContent)}</div>` : '';
+  const bodyClass = s.sheetsPerPage > 1 ? ' class="sheets-multi"' : '';
+
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${buildTimetableCss(isLandscape, s.sheetsPerPage)}</style></head>
+<body${bodyClass}>
+  ${timetablesHtml}
+  <div class="page-footer">
+    <span class="f-left">${esc(today)}</span>
+    <span class="f-center"><span class="watermark">Generated by TimetableWiz</span> &mdash; ${esc(schoolName)}</span>
+    <span class="f-right">Page <span class="page-num"></span></span>
+  </div>
+  ${customFooterHtml}
+</body></html>`;
+}
+
+/* ---------- Combined Teacher Schedule HTML ---------- */
+
+function buildCombinedTeacherScheduleHtml(
+  schoolName: string,
+  teacherList: { id: string; name: string; shortName: string }[],
+  store: ReturnType<typeof useTimetableStore.getState>,
+  showBreaks: boolean,
+  showEmpty: boolean,
+  printSettings: PrintSettings
+): string {
+  const s = printSettings;
+  const isLandscape = s.orientation === 'landscape';
+  const { timings, entries, teachers, classes, sections, subjects } = store;
+  const activeDays = timings.days;
+  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const reportTitle = 'Teacher Schedule Report';
+
+  let timetablesHtml = '';
+  for (let idx = 0; idx < teacherList.length; idx++) {
+    const tchr = teacherList[idx];
+    const filteredEntries = entries.filter((e) => e.teacherId === tchr.id);
+    const isFirstOnPage = idx % s.sheetsPerPage === 0;
+    const customHeaderHtml = s.headerContent && isFirstOnPage ? `<div class="custom-header">${esc(s.headerContent)}</div>` : '';
+
+    const getS = (id: string) => subjects.find((s) => s.id === id);
+    const getC = (id: string) => classes.find((c) => c.id === id);
+    const getSec = (id: string) => sections.find((s) => s.id === id);
+
+    let rows = '';
+    for (let p = 1; p <= timings.periodsPerDay; p++) {
+      const isBreak = isBreakPeriod(p, timings);
+      if (isBreak && !showBreaks) continue;
+      const time = getPeriodTime(p, timings);
+      const label = getPeriodLabel(p, timings);
+      const rowClass = isBreak ? ' class="brk"' : '';
+      rows += `<tr${rowClass}><td class="tp"><span class="pl">${esc(label)}</span><span class="tt-time">${esc(time)}</span></td>`;
+      if (isBreak) {
+        rows += `<td class="tb" colspan="${activeDays.length}" style="text-align:center;">&#9749; Break</td>`;
+        rows += '</tr>';
+        continue;
+      }
+      for (const day of activeDays) {
+        const entry = filteredEntries.find((e) => e.day === day && e.period === p);
+        if (entry) {
+          const subj = getS(entry.subjectId);
+          const cls = getC(entry.classId);
+          const sec = getSec(entry.sectionId);
+          const sc = getSubjectPrintColor(entry.subjectId);
+          rows += `<td class="tf" style="background:${sc.bg};color:${sc.fg};border-left:2px solid ${sc.border};"><b>${esc(subj?.shortName || '?')}</b><span class="tn" style="color:${sc.fg};opacity:0.7;">${esc(cls?.name || '')}-${esc(sec?.name || '')}</span></td>`;
+        } else if (showEmpty) {
+          rows += '<td class="te">\u2014</td>';
+        } else {
+          rows += '<td></td>';
+        }
+      }
+      rows += '</tr>';
+    }
+
+    if (s.sheetsPerPage > 1) {
+      const headerHtml = isFirstOnPage
+        ? `<div class="page-header"><div class="header-bar"></div><div class="school-name">${esc(schoolName)}</div><div class="report-title">${esc(reportTitle)}</div><div class="report-sub">${esc(tchr.name)}</div>${customHeaderHtml}</div>`
+        : `<div class="sheet-label"><div class="sheet-label-title">${esc(reportTitle)}</div><div class="sheet-label-sub">${esc(tchr.name)}</div></div>`;
+      timetablesHtml += `
+    <div class="sheet-slot">
+      ${headerHtml}
+      <table class="tt">
+        <thead><tr><th>Day / Period</th>${activeDays.map((d: string) => `<th>${esc(d)}</th>`).join('')}</tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+    } else {
+      timetablesHtml += `
+    <div class="timetable-page">
+      <div class="page-header">
+        <div class="header-bar"></div>
+        <div class="school-name">${esc(schoolName)}</div>
+        <div class="report-title">${esc(reportTitle)}</div>
+        <div class="report-sub">${esc(tchr.name)}</div>
+        ${customHeaderHtml}
+      </div>
+      <table class="tt">
+        <thead><tr><th>Day / Period</th>${activeDays.map((d: string) => `<th>${esc(d)}</th>`).join('')}</tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+    }
+  }
+
+  const customFooterHtml = s.footerContent ? `<div class="custom-footer">${esc(s.footerContent)}</div>` : '';
+  const bodyClass = s.sheetsPerPage > 1 ? ' class="sheets-multi"' : '';
+
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${buildTimetableCss(isLandscape, s.sheetsPerPage)}</style></head>
+<body${bodyClass}>
+  ${timetablesHtml}
+  <div class="page-footer">
+    <span class="f-left">${esc(today)}</span>
+    <span class="f-center"><span class="watermark">Generated by TimetableWiz</span> &mdash; ${esc(schoolName)}</span>
+    <span class="f-right">Page <span class="page-num"></span></span>
+  </div>
+  ${customFooterHtml}
+</body></html>`;
+}
+
+/* ---------- Class Timetable HTML ---------- */
+
+function buildClassTimetableHtml(
+  schoolName: string, className: string, sectionName: string,
+  timings: any, entries: any[], teachers: any[], classes: any[], sections: any[], subjects: any[],
+  classId: string, sectionId: string, showBreaks: boolean, showEmpty: boolean,
+  printSettings?: PrintSettings
+): string {
+  const s = printSettings || DEFAULT_PRINT_SETTINGS;
+  const isLandscape = s.orientation === 'landscape';
+  const activeDays = timings.days;
+  const filteredEntries = entries.filter((e: any) => e.classId === classId && e.sectionId === sectionId);
+  const genTime = new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+  const reportTitle = 'Class Timetable';
+  const subtitle = `${className} — ${sectionName}`;
+
+  const getT = (id: string) => teachers.find((t: any) => t.id === id);
+  const getS = (id: string) => subjects.find((s: any) => s.id === id);
+
+  let rows = '';
+  for (let p = 1; p <= timings.periodsPerDay; p++) {
+    const isBreak = isBreakPeriod(p, timings);
+    if (isBreak && !showBreaks) continue;
+    const time = getPeriodTime(p, timings);
+    const label = getPeriodLabel(p, timings);
+    const rowClass = isBreak ? ' class="brk"' : '';
+    rows += `<tr${rowClass}><td class="tp"><span class="pl">${esc(label)}</span><span class="tt-time">${esc(time)}</span></td>`;
+    if (isBreak) {
+      rows += `<td class="tb" colspan="${activeDays.length}" style="text-align:center;">&#9749; Break</td>`;
+      rows += '</tr>';
+      continue;
+    }
+    for (const day of activeDays) {
+      const entry = filteredEntries.find((e: any) => e.day === day && e.period === p);
+      if (entry) {
+        const subj = getS(entry.subjectId);
+        const tchr = getT(entry.teacherId);
+        const sc = getSubjectPrintColor(entry.subjectId);
+        rows += `<td class="tf" style="background:${sc.bg};color:${sc.fg};border-left:2px solid ${sc.border};"><b>${esc(subj?.shortName || '?')}</b><span class="tn" style="color:${sc.fg};opacity:0.7;">${esc(tchr?.name || '?')}</span></td>`;
+      } else if (showEmpty) {
+        rows += '<td class="te">\u2014</td>';
+      } else {
+        rows += '<td></td>';
+      }
+    }
+    rows += '</tr>';
+  }
+
+  const customHeaderHtml = s.headerContent
+    ? `<div class="custom-header">${esc(s.headerContent)}</div>`
+    : '';
+  const customFooterHtml = s.footerContent
+    ? `<div class="custom-footer">${esc(s.footerContent)}</div>`
+    : '';
+  const bodyClass = s.sheetsPerPage > 1 ? ' class="sheets-multi"' : '';
+
+  const tableHtml = `<table class="tt">
+    <thead><tr><th>Day / Period</th>${activeDays.map((d: string) => `<th>${esc(d)}</th>`).join('')}</tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+
+  const sheetContent = s.sheetsPerPage > 1
+    ? `<div class="sheet-slot"><div class="page-header"><div class="header-bar"></div><div class="school-name">${esc(schoolName)}</div><div class="report-title">${esc(reportTitle)}</div><div class="report-sub">${esc(subtitle)}</div>${customHeaderHtml}</div>${tableHtml}</div>`
+    : `<div class="page-header"><div class="header-bar"></div><div class="school-name">${esc(schoolName)}</div><div class="report-title">${esc(reportTitle)}</div><div class="report-sub">${esc(subtitle)}</div>${customHeaderHtml}</div>${tableHtml}`;
+
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${buildTimetableCss(isLandscape, s.sheetsPerPage)}</style></head>
+<body${bodyClass}>
+  ${sheetContent}
+  <div class="page-footer">
+    <span class="f-left">${esc(genTime)}</span>
+    <span class="f-center"><span class="watermark">Generated by TimetableWiz</span> &mdash; ${esc(schoolName)} &mdash; ${esc(reportTitle)}</span>
+    <span class="f-right">Page: 1 of 1</span>
+  </div>
+  ${customFooterHtml}
+</body></html>`;
+}
+
+/* ---------- Teacher Schedule HTML ---------- */
+
+function buildTeacherScheduleHtml(
+  schoolName: string, teacherName: string,
+  timings: any, entries: any[], teachers: any[], classes: any[], sections: any[], subjects: any[],
+  teacherId: string, showBreaks: boolean, showEmpty: boolean,
+  printSettings?: PrintSettings
+): string {
+  const s = printSettings || DEFAULT_PRINT_SETTINGS;
+  const isLandscape = s.orientation === 'landscape';
+  const activeDays = timings.days;
+  const filteredEntries = entries.filter((e: any) => e.teacherId === teacherId);
+  const genTime = new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+  const reportTitle = 'Teacher Schedule';
+
+  const getS = (id: string) => subjects.find((s: any) => s.id === id);
+  const getC = (id: string) => classes.find((c: any) => c.id === id);
+  const getSec = (id: string) => sections.find((s: any) => s.id === id);
+
+  let rows = '';
+  for (let p = 1; p <= timings.periodsPerDay; p++) {
+    const isBreak = isBreakPeriod(p, timings);
+    if (isBreak && !showBreaks) continue;
+    const time = getPeriodTime(p, timings);
+    const label = getPeriodLabel(p, timings);
+    const rowClass = isBreak ? ' class="brk"' : '';
+    rows += `<tr${rowClass}><td class="tp"><span class="pl">${esc(label)}</span><span class="tt-time">${esc(time)}</span></td>`;
+    if (isBreak) {
+      rows += `<td class="tb" colspan="${activeDays.length}" style="text-align:center;">&#9749; Break</td>`;
+      rows += '</tr>';
+      continue;
+    }
+    for (const day of activeDays) {
+      const entry = filteredEntries.find((e: any) => e.day === day && e.period === p);
+      if (entry) {
+        const subj = getS(entry.subjectId);
+        const cls = getC(entry.classId);
+        const sec = getSec(entry.sectionId);
+        const sc = getSubjectPrintColor(entry.subjectId);
+        rows += `<td class="tf" style="background:${sc.bg};color:${sc.fg};border-left:2px solid ${sc.border};"><b>${esc(subj?.shortName || '?')}</b><span class="tn" style="color:${sc.fg};opacity:0.7;">${esc(cls?.name || '')}-${esc(sec?.name || '')}</span></td>`;
+      } else if (showEmpty) {
+        rows += '<td class="te">\u2014</td>';
+      } else {
+        rows += '<td></td>';
+      }
+    }
+    rows += '</tr>';
+  }
+
+  const customHeaderHtml = s.headerContent
+    ? `<div class="custom-header">${esc(s.headerContent)}</div>`
+    : '';
+  const customFooterHtml = s.footerContent
+    ? `<div class="custom-footer">${esc(s.footerContent)}</div>`
+    : '';
+  const bodyClass = s.sheetsPerPage > 1 ? ' class="sheets-multi"' : '';
+
+  const tableHtml = `<table class="tt">
+    <thead><tr><th>Day / Period</th>${activeDays.map((d: string) => `<th>${esc(d)}</th>`).join('')}</tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+
+  const sheetContent = s.sheetsPerPage > 1
+    ? `<div class="sheet-slot"><div class="page-header"><div class="header-bar"></div><div class="school-name">${esc(schoolName)}</div><div class="report-title">${esc(reportTitle)}</div><div class="report-sub">${esc(teacherName)}</div>${customHeaderHtml}</div>${tableHtml}</div>`
+    : `<div class="page-header"><div class="header-bar"></div><div class="school-name">${esc(schoolName)}</div><div class="report-title">${esc(reportTitle)}</div><div class="report-sub">${esc(teacherName)}</div>${customHeaderHtml}</div>${tableHtml}`;
+
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${buildTimetableCss(isLandscape, s.sheetsPerPage)}</style></head>
+<body${bodyClass}>
+  ${sheetContent}
+  <div class="page-footer">
+    <span class="f-left">${esc(genTime)}</span>
+    <span class="f-center"><span class="watermark">Generated by TimetableWiz</span> &mdash; ${esc(schoolName)} &mdash; ${esc(reportTitle)}</span>
+    <span class="f-right">Page: 1 of 1</span>
+  </div>
+  ${customFooterHtml}
+</body></html>`;
+}
+
+/* ---------- Daywise Schedule HTML ---------- */
+
+function buildDaywiseScheduleHtml(
+  schoolName: string,
+  selectedDays: string[],
+  combos: { value: string; label: string; classId: string; sectionId: string }[],
+  timings: any,
+  entries: any[],
+  teachers: any[],
+  classes: any[],
+  sections: any[],
+  subjects: any[],
+  showBreaks: boolean,
+  showEmpty: boolean,
+  printSettings?: PrintSettings
+): string {
+  const s = printSettings || DEFAULT_PRINT_SETTINGS;
+  const isLandscape = s.orientation === 'landscape';
+  const genTime = new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+  const reportTitle = 'Daywise Schedule';
+  const daysLabel = selectedDays.length === timings.days.length
+    ? 'All Days'
+    : selectedDays.join(', ');
+
+  const getS = (id: string) => subjects.find((s: any) => s.id === id);
+  const getT = (id: string) => teachers.find((t: any) => t.id === id);
+
+  let dayBlocksHtml = '';
+  for (let idx = 0; idx < selectedDays.length; idx++) {
+    const day = selectedDays[idx];
+    let rows = '';
+    for (let p = 1; p <= timings.periodsPerDay; p++) {
+      const isBreak = isBreakPeriod(p, timings);
+      if (isBreak && !showBreaks) continue;
+      const time = getPeriodTime(p, timings);
+      const label = getPeriodLabel(p, timings);
+      const rowClass = isBreak ? ' class="brk"' : '';
+      rows += `<tr${rowClass}><td class="tp"><span class="pl">${esc(label)}</span><span class="tt-time">${esc(time)}</span></td>`;
+      if (isBreak) {
+        rows += `<td class="tb" colspan="${combos.length}" style="text-align:center;">&#9749; Break</td>`;
+        rows += '</tr>';
+        continue;
+      }
+      for (const combo of combos) {
+        const entry = entries.find((e: any) => e.day === day && e.period === p && e.classId === combo.classId && e.sectionId === combo.sectionId);
+        if (entry) {
+          const subj = getS(entry.subjectId);
+          const tchr = getT(entry.teacherId);
+          const sc = getSubjectPrintColor(entry.subjectId);
+          rows += `<td class="tf" style="background:${sc.bg};color:${sc.fg};border-left:2px solid ${sc.border};"><b>${esc(subj?.shortName || '?')}</b><span class="tn" style="color:${sc.fg};opacity:0.7;">${esc(tchr?.name || '?')}</span></td>`;
+        } else if (showEmpty) {
+          rows += '<td class="te">\u2014</td>';
+        } else {
+          rows += '<td></td>';
+        }
+      }
+      rows += '</tr>';
+    }
+
+    if (s.sheetsPerPage > 1) {
+      const isFirstOnPage = idx % s.sheetsPerPage === 0;
+      const dayHeaderHtml = isFirstOnPage
+        ? `<div class="page-header"><div class="header-bar"></div><div class="school-name">${esc(schoolName)}</div><div class="report-title">${esc(reportTitle)}</div><div class="report-sub">${esc(day)} | ${combos.length} class${combos.length !== 1 ? 'es' : ''}</div>${s.headerContent ? `<div class="custom-header">${esc(s.headerContent)}</div>` : ''}</div>`
+        : `<div class="sheet-label"><div class="sheet-label-title">${esc(day)}</div><div class="sheet-label-sub">${combos.length} class${combos.length !== 1 ? 'es' : ''}</div></div>`;
+      dayBlocksHtml += `
+    <div class="sheet-slot">
+      ${dayHeaderHtml}
+      <div class="day-block">
+        <table class="tt">
+          <thead><tr><th>Period</th>${combos.map((c) => `<th>${esc(c.label)}</th>`).join('')}</tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+    } else {
+      // Single sheet per page
+      dayBlocksHtml += `
+    <div class="day-block">
+      <div class="db"><div class="dh">${esc(day)}</div></div>
+      <table class="tt">
+        <thead><tr><th>Period</th>${combos.map((c) => `<th>${esc(c.label)}</th>`).join('')}</tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+    }
+  }
+
+  const customHeaderHtml = s.headerContent
+    ? `<div class="custom-header">${esc(s.headerContent)}</div>`
+    : '';
+  const customFooterHtml = s.footerContent
+    ? `<div class="custom-footer">${esc(s.footerContent)}</div>`
+    : '';
+  const bodyClass = s.sheetsPerPage > 1 ? ' class="sheets-multi"' : '';
+
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${buildTimetableCss(isLandscape, s.sheetsPerPage)}
+  .day-block { margin-bottom: 16px; page-break-inside: avoid; break-inside: avoid; }
+  .day-block .db { margin-bottom: 0; }
+  .day-block table.tt { margin-top: 0; }
+</style></head>
+<body${bodyClass}>
+  ${s.sheetsPerPage === 1 ? `<div class="page-header">
+    <div class="header-bar"></div>
+    <div class="school-name">${esc(schoolName)}</div>
+    <div class="report-title">${esc(reportTitle)}</div>
+    <div class="report-sub">${esc(daysLabel)} | ${combos.length} class${combos.length !== 1 ? 'es' : ''}</div>
+    ${customHeaderHtml}
+  </div>` : ''}
+  <div class="page-footer">
+    <span class="f-left">${esc(genTime)}</span>
+    <span class="f-center"><span class="watermark">Generated by TimetableWiz</span> &mdash; ${esc(schoolName)} &mdash; ${esc(reportTitle)}</span>
+    <span class="f-right">Page <span class="page-num"></span></span>
+  </div>
+  ${dayBlocksHtml}
+  ${customFooterHtml}
+</body></html>`;
+}
