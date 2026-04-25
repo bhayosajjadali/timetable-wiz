@@ -219,12 +219,12 @@ export function ReportsTab() {
 
   // ── Visible items for Timetables tab ──
   const visibleClassSections = useMemo(() => {
-    if (selectedClassSectionKeys.length === 0) return classSectionOpts;
+    if (selectedClassSectionKeys.length === 0) return [];
     return classSectionOpts.filter((o) => selectedClassSectionKeys.includes(o.value));
   }, [selectedClassSectionKeys, classSectionOpts]);
 
   const visibleTeachers = useMemo(() => {
-    if (selectedTeacherIds.length === 0) return filteredTeachers;
+    if (selectedTeacherIds.length === 0) return [];
     return filteredTeachers.filter((t) => selectedTeacherIds.includes(t.id));
   }, [selectedTeacherIds, filteredTeachers]);
 
@@ -474,9 +474,11 @@ export function ReportsTab() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {selectedClassSectionKeys.length === 0 && classSectionOpts.length > 0 && (
-                  <p className="text-sm text-muted-foreground text-center py-6">
-                    Showing all classes. Use the dropdown above to filter, or go to PDF Export to print/download.
-                  </p>
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <GraduationCap className="h-10 w-10 text-muted-foreground/30 mb-3" />
+                    <p className="text-sm text-muted-foreground">Select classes from the dropdown above to preview timetables</p>
+                    <p className="text-xs text-muted-foreground/60 mt-1">Choose one or more class–section combinations</p>
+                  </div>
                 )}
                 {visibleClassSections.map((combo) => (
                   <ClassTimetableReport
@@ -517,9 +519,11 @@ export function ReportsTab() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {selectedTeacherIds.length === 0 && teacherOpts.length > 0 && (
-                  <p className="text-sm text-muted-foreground text-center py-6">
-                    Showing all teachers. Use the dropdown above to filter, or go to PDF Export to print/download.
-                  </p>
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <UserCheck className="h-10 w-10 text-muted-foreground/30 mb-3" />
+                    <p className="text-sm text-muted-foreground">Select teachers from the dropdown above to preview schedules</p>
+                    <p className="text-xs text-muted-foreground/60 mt-1">Choose one or more teachers to view their weekly timetables</p>
+                  </div>
                 )}
                 {visibleTeachers.map((t) => (
                   <TeacherScheduleReport key={t.id} teacherId={t.id} showBreaks={showBreaks} showEmpty={showEmpty} />
@@ -1241,7 +1245,7 @@ function TeacherPeriodCountReport() {
   const reportRef = useRef<HTMLDivElement>(null);
 
   const activeDays = timings.days;
-  const [selectedDays, setSelectedDays] = useState<string[]>([...activeDays]);
+  const [selectedDays, setSelectedDays] = useState<string[]>([]);
   const [detailMode, setDetailMode] = useState<DetailMode>('show-periods');
 
   const toggleDay = (day: string) => {
@@ -1324,6 +1328,16 @@ function TeacherPeriodCountReport() {
           </div>
         </CardContent>
       </Card>
+
+      {selectedDays.length === 0 && (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+            <BarChart3 className="h-10 w-10 text-muted-foreground/30 mb-3" />
+            <p className="text-sm text-muted-foreground">Select days above to preview the period count report</p>
+            <p className="text-xs text-muted-foreground/60 mt-1">Choose one or more working days to calculate teacher workload</p>
+          </CardContent>
+        </Card>
+      )}
 
       {selectedDays.length > 0 && (
         <Card ref={reportRef}>
