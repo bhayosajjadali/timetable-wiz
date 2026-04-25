@@ -174,7 +174,7 @@ export function ReportsTab() {
   const { toast } = useToast();
   const { downloadPdf, isGenerating } = usePdfDownload();
 
-  const { classes, sections, teachers, timings } = useTimetableStore();
+  const { classes, sections, teachers, timings, schoolName } = useTimetableStore();
   const availableClasses = classes.filter((c) => c.sectionIds.length > 0);
 
   // ── Helpers ──
@@ -325,7 +325,24 @@ export function ReportsTab() {
       console.error('Export failed:', err);
       toast({ title: 'Export failed', description: 'An error occurred. Please try again.', variant: 'destructive' });
     }
-  }, [exportType, exportShowBreaks, exportShowEmpty, exportOrientation, exportSheetsPerPage, exportHeaderContent, exportFooterContent, exportSelectedClasses, exportSelectedTeachers, exportSelectedDays, exportDetailMode, exportDaywiseDays, exportDaywiseClasses, classSectionOpts, exportSettings, toast, downloadPdf]);
+  }, [
+    exportType,
+    exportShowBreaks,
+    exportShowEmpty,
+    exportOrientation,
+    exportSheetsPerPage,
+    exportHeaderContent,
+    exportFooterContent,
+    exportSelectedClasses,
+    exportSelectedTeachers,
+    exportSelectedDays,
+    exportDetailMode,
+    exportDaywiseDays,
+    exportDaywiseClasses,
+    classSectionOpts,
+    toast,
+    downloadPdf,
+  ]);
 
   // ── PDF Export summary text ──
   const exportSummary = useMemo(() => {
@@ -358,7 +375,20 @@ export function ReportsTab() {
     parts.push(exportOrientation === 'landscape' ? 'Landscape' : 'Portrait');
     parts.push(`${exportSheetsPerPage} sheet${exportSheetsPerPage !== 1 ? 's' : ''}/page`);
     return parts.join(', ');
-  }, [exportType, exportSelectedClasses, exportSelectedTeachers, exportSelectedDays, exportDetailMode, exportDaywiseDays, exportDaywiseClasses, exportOrientation, exportSheetsPerPage, classSectionOpts, teachers, timings.days]);
+  }, [
+    exportType,
+    exportSelectedClasses,
+    exportSelectedTeachers,
+    exportSelectedDays,
+    exportDetailMode,
+    exportDaywiseDays,
+    exportDaywiseClasses,
+    exportOrientation,
+    exportSheetsPerPage,
+    classSectionOpts,
+    teachers,
+    timings,
+  ]);
 
   return (
     <div className="space-y-4">
@@ -378,9 +408,9 @@ export function ReportsTab() {
           </TabsTrigger>
         </TabsList>
 
-        {/* ═══════════════════════════════════════════════════════════════
+        {/* ══════════════════════════════════════════════════════════════
             Tab 1: Timetables
-            ═══════════════════════════════════════════════════════════════ */}
+            ══════════════════════════════════════════════════════════════ */}
         <TabsContent value="timetables">
           {/* View mode toggle + global filters */}
           <Card>
@@ -532,16 +562,16 @@ export function ReportsTab() {
           )}
         </TabsContent>
 
-        {/* ═══════════════════════════════════════════════════════════════
+        {/* ══════════════════════════════════════════════════════════════
             Tab 2: Period Count
-            ═══════════════════════════════════════════════════════════════ */}
+            ══════════════════════════════════════════════════════════════ */}
         <TabsContent value="period-count">
           <TeacherPeriodCountReport />
         </TabsContent>
 
-        {/* ═══════════════════════════════════════════════════════════════
+        {/* ══════════════════════════════════════════════════════════════
             Tab 3: PDF Export
-            ═══════════════════════════════════════════════════════════════ */}
+            ══════════════════════════════════════════════════════════════ */}
         <TabsContent value="pdf-export">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* ── Left: Configuration ── */}
@@ -1148,7 +1178,7 @@ function buildPeriodCountReportHtml(params: {
 
       const isFirstOnPage = ci % tablesPerPage === 0;
       const chunkHeaderHtml = isFirstOnPage
-        ? `<div class="report-header"><div class="school-name">${esc(schoolName)}</div><div class="report-title">Teacher Period Count Report</div><div class="report-subtitle">${esc(daysLabel)} | Max ${maxPossiblePerTeacher} periods/teacher | ${teachersCount} teachers</div>${ci === 0 ? customHeaderHtml : ''}</div>`
+        ? `<div class="report-header"><div class="school-name">${esc(schoolName)}</div><div class="report-title">Teacher Period Count Report</div><div class="report-subtitle">${esc(daysLabel)} | Max ${maxPossiblePerTeacher} periods/teacher | ${teachersCount} teachers</div>${customHeaderHtml}</div>`
         : `<div class="sheet-label-pc">Part ${ci + 1} — ${esc(daysLabel)}</div>`;
 
       tablesHtml += `
@@ -1165,9 +1195,7 @@ function buildPeriodCountReportHtml(params: {
       if (detailMode === 'show-periods') {
         tablesHtml += '<th class="th-detail">Periods</th>';
       }
-      tablesHtml += `</tr></thead>`;
-            <tbody>${tableRows}</tbody>
-          </table>
+      tablesHtml += `</tr></thead><tbody>${tableRows}</tbody></table>
         </div>`;
     });
   }
@@ -2413,461 +2441,4 @@ function buildCombinedClassTimetableHtml(
     const cls = classes.find((c) => c.id === combo.classId);
     const sec = sections.find((s) => s.id === combo.sectionId);
     const filteredEntries = entries.filter((e) => e.classId === combo.classId && e.sectionId === combo.sectionId);
-    const subtitle = `${cls?.name || ''} — ${sec?.name || ''}`;
-    const isFirstOnPage = idx % s.sheetsPerPage === 0;
-    const customHeaderHtml = s.headerContent && isFirstOnPage ? `<div class="custom-header">${esc(s.headerContent)}</div>` : '';
-
-    const getS = (id: string) => subjects.find((s) => s.id === id);
-    const getT = (id: string) => teachers.find((t) => t.id === id);
-
-    let rows = '';
-    for (let p = 1; p <= timings.periodsPerDay; p++) {
-      const isBreak = isBreakPeriod(p, timings);
-      if (isBreak && !showBreaks) continue;
-      const time = getPeriodTime(p, timings);
-      const label = getPeriodLabel(p, timings);
-      const rowClass = isBreak ? ' class="brk"' : '';
-      rows += `<tr${rowClass}><td class="tp"><span class="pl">${esc(label)}</span><span class="tt-time">${esc(time)}</span></td>`;
-      if (isBreak) {
-        rows += `<td class="tb" colspan="${activeDays.length}" style="text-align:center;">&#9749; Break</td>`;
-        rows += '</tr>';
-        continue;
-      }
-      for (const day of activeDays) {
-        const entry = filteredEntries.find((e) => e.day === day && e.period === p);
-        if (entry) {
-          const subj = getS(entry.subjectId);
-          const tchr = getT(entry.teacherId);
-          const sc = getSubjectPrintColor(entry.subjectId);
-          rows += `<td class="tf" style="background:${sc.bg};color:${sc.fg};border-left:2px solid ${sc.border};"><b>${esc(subj?.shortName || '?')}</b><span class="tn" style="color:${sc.fg};opacity:0.7;">${esc(tchr?.name || '?')}</span></td>`;
-        } else if (showEmpty) {
-          rows += '<td class="te">\u2014</td>';
-        } else {
-          rows += '<td></td>';
-        }
-      }
-      rows += '</tr>';
-    }
-
-    if (s.sheetsPerPage > 1) {
-      // Multi-sheet mode: only generate the correct header type for this position
-      const headerHtml = isFirstOnPage
-        ? `<div class="page-header"><div class="header-bar"></div><div class="school-name">${esc(schoolName)}</div><div class="report-title">${esc(reportTitle)}</div><div class="report-sub">${esc(subtitle)}</div>${customHeaderHtml}</div>`
-        : `<div class="sheet-label"><div class="sheet-label-title">${esc(reportTitle)}</div><div class="sheet-label-sub">${esc(subtitle)}</div></div>`;
-      timetablesHtml += `
-    <div class="sheet-slot">
-      ${headerHtml}
-      <table class="tt">
-        <thead><tr><th>Day / Period</th>${activeDays.map((d: string) => `<th>${esc(d)}</th>`).join('')}</tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>`;
-    } else {
-      // Single sheet per page — each timetable on its own page
-      timetablesHtml += `
-    <div class="timetable-page">
-      <div class="page-header">
-        <div class="header-bar"></div>
-        <div class="school-name">${esc(schoolName)}</div>
-        <div class="report-title">${esc(reportTitle)}</div>
-        <div class="report-sub">${esc(subtitle)}</div>
-        ${customHeaderHtml}
-      </div>
-      <table class="tt">
-        <thead><tr><th>Day / Period</th>${activeDays.map((d: string) => `<th>${esc(d)}</th>`).join('')}</tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>`;
-    }
-  }
-
-  const customFooterHtml = s.footerContent ? `<div class="custom-footer">${esc(s.footerContent)}</div>` : '';
-  const bodyClass = s.sheetsPerPage > 1 ? ' class="sheets-multi"' : '';
-
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${buildTimetableCss(isLandscape, s.sheetsPerPage)}</style></head>
-<body${bodyClass}>
-  ${timetablesHtml}
-  <div class="page-footer">
-    <span class="f-left">${esc(today)}</span>
-    <span class="f-center"><span class="watermark">Generated by TimetableWiz</span> &mdash; ${esc(schoolName)}</span>
-    <span class="f-right">Page <span class="page-num"></span></span>
-  </div>
-  ${customFooterHtml}
-</body></html>`;
-}
-
-/* ---------- Combined Teacher Schedule HTML ---------- */
-
-function buildCombinedTeacherScheduleHtml(
-  schoolName: string,
-  teacherList: { id: string; name: string; shortName: string }[],
-  store: ReturnType<typeof useTimetableStore.getState>,
-  showBreaks: boolean,
-  showEmpty: boolean,
-  printSettings: PrintSettings
-): string {
-  const s = printSettings;
-  const isLandscape = s.orientation === 'landscape';
-  const { timings, entries, teachers, classes, sections, subjects } = store;
-  const activeDays = timings.days;
-  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-  const reportTitle = 'Teacher Schedule Report';
-
-  let timetablesHtml = '';
-  for (let idx = 0; idx < teacherList.length; idx++) {
-    const tchr = teacherList[idx];
-    const filteredEntries = entries.filter((e) => e.teacherId === tchr.id);
-    const isFirstOnPage = idx % s.sheetsPerPage === 0;
-    const customHeaderHtml = s.headerContent && isFirstOnPage ? `<div class="custom-header">${esc(s.headerContent)}</div>` : '';
-
-    const getS = (id: string) => subjects.find((s) => s.id === id);
-    const getC = (id: string) => classes.find((c) => c.id === id);
-    const getSec = (id: string) => sections.find((s) => s.id === id);
-
-    let rows = '';
-    for (let p = 1; p <= timings.periodsPerDay; p++) {
-      const isBreak = isBreakPeriod(p, timings);
-      if (isBreak && !showBreaks) continue;
-      const time = getPeriodTime(p, timings);
-      const label = getPeriodLabel(p, timings);
-      const rowClass = isBreak ? ' class="brk"' : '';
-      rows += `<tr${rowClass}><td class="tp"><span class="pl">${esc(label)}</span><span class="tt-time">${esc(time)}</span></td>`;
-      if (isBreak) {
-        rows += `<td class="tb" colspan="${activeDays.length}" style="text-align:center;">&#9749; Break</td>`;
-        rows += '</tr>';
-        continue;
-      }
-      for (const day of activeDays) {
-        const entry = filteredEntries.find((e) => e.day === day && e.period === p);
-        if (entry) {
-          const subj = getS(entry.subjectId);
-          const cls = getC(entry.classId);
-          const sec = getSec(entry.sectionId);
-          const sc = getSubjectPrintColor(entry.subjectId);
-          rows += `<td class="tf" style="background:${sc.bg};color:${sc.fg};border-left:2px solid ${sc.border};"><b>${esc(subj?.shortName || '?')}</b><span class="tn" style="color:${sc.fg};opacity:0.7;">${esc(cls?.name || '')}-${esc(sec?.name || '')}</span></td>`;
-        } else if (showEmpty) {
-          rows += '<td class="te">\u2014</td>';
-        } else {
-          rows += '<td></td>';
-        }
-      }
-      rows += '</tr>';
-    }
-
-    if (s.sheetsPerPage > 1) {
-      const headerHtml = isFirstOnPage
-        ? `<div class="page-header"><div class="header-bar"></div><div class="school-name">${esc(schoolName)}</div><div class="report-title">${esc(reportTitle)}</div><div class="report-sub">${esc(tchr.name)}</div>${customHeaderHtml}</div>`
-        : `<div class="sheet-label"><div class="sheet-label-title">${esc(reportTitle)}</div><div class="sheet-label-sub">${esc(tchr.name)}</div></div>`;
-      timetablesHtml += `
-    <div class="sheet-slot">
-      ${headerHtml}
-      <table class="tt">
-        <thead><tr><th>Day / Period</th>${activeDays.map((d: string) => `<th>${esc(d)}</th>`).join('')}</tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>`;
-    } else {
-      timetablesHtml += `
-    <div class="timetable-page">
-      <div class="page-header">
-        <div class="header-bar"></div>
-        <div class="school-name">${esc(schoolName)}</div>
-        <div class="report-title">${esc(reportTitle)}</div>
-        <div class="report-sub">${esc(tchr.name)}</div>
-        ${customHeaderHtml}
-      </div>
-      <table class="tt">
-        <thead><tr><th>Day / Period</th>${activeDays.map((d: string) => `<th>${esc(d)}</th>`).join('')}</tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>`;
-    }
-  }
-
-  const customFooterHtml = s.footerContent ? `<div class="custom-footer">${esc(s.footerContent)}</div>` : '';
-  const bodyClass = s.sheetsPerPage > 1 ? ' class="sheets-multi"' : '';
-
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${buildTimetableCss(isLandscape, s.sheetsPerPage)}</style></head>
-<body${bodyClass}>
-  ${timetablesHtml}
-  <div class="page-footer">
-    <span class="f-left">${esc(today)}</span>
-    <span class="f-center"><span class="watermark">Generated by TimetableWiz</span> &mdash; ${esc(schoolName)}</span>
-    <span class="f-right">Page <span class="page-num"></span></span>
-  </div>
-  ${customFooterHtml}
-</body></html>`;
-}
-
-/* ---------- Class Timetable HTML ---------- */
-
-function buildClassTimetableHtml(
-  schoolName: string, className: string, sectionName: string,
-  timings: any, entries: any[], teachers: any[], classes: any[], sections: any[], subjects: any[],
-  classId: string, sectionId: string, showBreaks: boolean, showEmpty: boolean,
-  printSettings?: PrintSettings
-): string {
-  const s = printSettings || DEFAULT_PRINT_SETTINGS;
-  const isLandscape = s.orientation === 'landscape';
-  const activeDays = timings.days;
-  const filteredEntries = entries.filter((e: any) => e.classId === classId && e.sectionId === sectionId);
-  const genTime = new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
-  const reportTitle = 'Class Timetable';
-  const subtitle = `${className} — ${sectionName}`;
-
-  const getT = (id: string) => teachers.find((t: any) => t.id === id);
-  const getS = (id: string) => subjects.find((s: any) => s.id === id);
-
-  let rows = '';
-  for (let p = 1; p <= timings.periodsPerDay; p++) {
-    const isBreak = isBreakPeriod(p, timings);
-    if (isBreak && !showBreaks) continue;
-    const time = getPeriodTime(p, timings);
-    const label = getPeriodLabel(p, timings);
-    const rowClass = isBreak ? ' class="brk"' : '';
-    rows += `<tr${rowClass}><td class="tp"><span class="pl">${esc(label)}</span><span class="tt-time">${esc(time)}</span></td>`;
-    if (isBreak) {
-      rows += `<td class="tb" colspan="${activeDays.length}" style="text-align:center;">&#9749; Break</td>`;
-      rows += '</tr>';
-      continue;
-    }
-    for (const day of activeDays) {
-      const entry = filteredEntries.find((e: any) => e.day === day && e.period === p);
-      if (entry) {
-        const subj = getS(entry.subjectId);
-        const tchr = getT(entry.teacherId);
-        const sc = getSubjectPrintColor(entry.subjectId);
-        rows += `<td class="tf" style="background:${sc.bg};color:${sc.fg};border-left:2px solid ${sc.border};"><b>${esc(subj?.shortName || '?')}</b><span class="tn" style="color:${sc.fg};opacity:0.7;">${esc(tchr?.name || '?')}</span></td>`;
-      } else if (showEmpty) {
-        rows += '<td class="te">\u2014</td>';
-      } else {
-        rows += '<td></td>';
-      }
-    }
-    rows += '</tr>';
-  }
-
-  const customHeaderHtml = s.headerContent
-    ? `<div class="custom-header">${esc(s.headerContent)}</div>`
-    : '';
-  const customFooterHtml = s.footerContent
-    ? `<div class="custom-footer">${esc(s.footerContent)}</div>`
-    : '';
-  const bodyClass = s.sheetsPerPage > 1 ? ' class="sheets-multi"' : '';
-
-  const tableHtml = `<table class="tt">
-    <thead><tr><th>Day / Period</th>${activeDays.map((d: string) => `<th>${esc(d)}</th>`).join('')}</tr></thead>
-    <tbody>${rows}</tbody>
-  </table>`;
-
-  const sheetContent = s.sheetsPerPage > 1
-    ? `<div class="sheet-slot"><div class="page-header"><div class="header-bar"></div><div class="school-name">${esc(schoolName)}</div><div class="report-title">${esc(reportTitle)}</div><div class="report-sub">${esc(subtitle)}</div>${customHeaderHtml}</div>${tableHtml}</div>`
-    : `<div class="page-header"><div class="header-bar"></div><div class="school-name">${esc(schoolName)}</div><div class="report-title">${esc(reportTitle)}</div><div class="report-sub">${esc(subtitle)}</div>${customHeaderHtml}</div>${tableHtml}`;
-
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${buildTimetableCss(isLandscape, s.sheetsPerPage)}</style></head>
-<body${bodyClass}>
-  ${sheetContent}
-  <div class="page-footer">
-    <span class="f-left">${esc(genTime)}</span>
-    <span class="f-center"><span class="watermark">Generated by TimetableWiz</span> &mdash; ${esc(schoolName)} &mdash; ${esc(reportTitle)}</span>
-    <span class="f-right">Page: 1 of 1</span>
-  </div>
-  ${customFooterHtml}
-</body></html>`;
-}
-
-/* ---------- Teacher Schedule HTML ---------- */
-
-function buildTeacherScheduleHtml(
-  schoolName: string, teacherName: string,
-  timings: any, entries: any[], teachers: any[], classes: any[], sections: any[], subjects: any[],
-  teacherId: string, showBreaks: boolean, showEmpty: boolean,
-  printSettings?: PrintSettings
-): string {
-  const s = printSettings || DEFAULT_PRINT_SETTINGS;
-  const isLandscape = s.orientation === 'landscape';
-  const activeDays = timings.days;
-  const filteredEntries = entries.filter((e: any) => e.teacherId === teacherId);
-  const genTime = new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
-  const reportTitle = 'Teacher Schedule';
-
-  const getS = (id: string) => subjects.find((s: any) => s.id === id);
-  const getC = (id: string) => classes.find((c: any) => c.id === id);
-  const getSec = (id: string) => sections.find((s: any) => s.id === id);
-
-  let rows = '';
-  for (let p = 1; p <= timings.periodsPerDay; p++) {
-    const isBreak = isBreakPeriod(p, timings);
-    if (isBreak && !showBreaks) continue;
-    const time = getPeriodTime(p, timings);
-    const label = getPeriodLabel(p, timings);
-    const rowClass = isBreak ? ' class="brk"' : '';
-    rows += `<tr${rowClass}><td class="tp"><span class="pl">${esc(label)}</span><span class="tt-time">${esc(time)}</span></td>`;
-    if (isBreak) {
-      rows += `<td class="tb" colspan="${activeDays.length}" style="text-align:center;">&#9749; Break</td>`;
-      rows += '</tr>';
-      continue;
-    }
-    for (const day of activeDays) {
-      const entry = filteredEntries.find((e: any) => e.day === day && e.period === p);
-      if (entry) {
-        const subj = getS(entry.subjectId);
-        const cls = getC(entry.classId);
-        const sec = getSec(entry.sectionId);
-        const sc = getSubjectPrintColor(entry.subjectId);
-        rows += `<td class="tf" style="background:${sc.bg};color:${sc.fg};border-left:2px solid ${sc.border};"><b>${esc(subj?.shortName || '?')}</b><span class="tn" style="color:${sc.fg};opacity:0.7;">${esc(cls?.name || '')}-${esc(sec?.name || '')}</span></td>`;
-      } else if (showEmpty) {
-        rows += '<td class="te">\u2014</td>';
-      } else {
-        rows += '<td></td>';
-      }
-    }
-    rows += '</tr>';
-  }
-
-  const customHeaderHtml = s.headerContent
-    ? `<div class="custom-header">${esc(s.headerContent)}</div>`
-    : '';
-  const customFooterHtml = s.footerContent
-    ? `<div class="custom-footer">${esc(s.footerContent)}</div>`
-    : '';
-  const bodyClass = s.sheetsPerPage > 1 ? ' class="sheets-multi"' : '';
-
-  const tableHtml = `<table class="tt">
-    <thead><tr><th>Day / Period</th>${activeDays.map((d: string) => `<th>${esc(d)}</th>`).join('')}</tr></thead>
-    <tbody>${rows}</tbody>
-  </table>`;
-
-  const sheetContent = s.sheetsPerPage > 1
-    ? `<div class="sheet-slot"><div class="page-header"><div class="header-bar"></div><div class="school-name">${esc(schoolName)}</div><div class="report-title">${esc(reportTitle)}</div><div class="report-sub">${esc(teacherName)}</div>${customHeaderHtml}</div>${tableHtml}</div>`
-    : `<div class="page-header"><div class="header-bar"></div><div class="school-name">${esc(schoolName)}</div><div class="report-title">${esc(reportTitle)}</div><div class="report-sub">${esc(teacherName)}</div>${customHeaderHtml}</div>${tableHtml}`;
-
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${buildTimetableCss(isLandscape, s.sheetsPerPage)}</style></head>
-<body${bodyClass}>
-  ${sheetContent}
-  <div class="page-footer">
-    <span class="f-left">${esc(genTime)}</span>
-    <span class="f-center"><span class="watermark">Generated by TimetableWiz</span> &mdash; ${esc(schoolName)} &mdash; ${esc(reportTitle)}</span>
-    <span class="f-right">Page: 1 of 1</span>
-  </div>
-  ${customFooterHtml}
-</body></html>`;
-}
-
-/* ---------- Daywise Schedule HTML ---------- */
-
-function buildDaywiseScheduleHtml(
-  schoolName: string,
-  selectedDays: string[],
-  combos: { value: string; label: string; classId: string; sectionId: string }[],
-  timings: any,
-  entries: any[],
-  teachers: any[],
-  classes: any[],
-  sections: any[],
-  subjects: any[],
-  showBreaks: boolean,
-  showEmpty: boolean,
-  printSettings?: PrintSettings
-): string {
-  const s = printSettings || DEFAULT_PRINT_SETTINGS;
-  const isLandscape = s.orientation === 'landscape';
-  const genTime = new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
-  const reportTitle = 'Daywise Schedule';
-  const daysLabel = selectedDays.length === timings.days.length
-    ? 'All Days'
-    : selectedDays.join(', ');
-
-  const getS = (id: string) => subjects.find((s: any) => s.id === id);
-  const getT = (id: string) => teachers.find((t: any) => t.id === id);
-
-  let dayBlocksHtml = '';
-  for (let idx = 0; idx < selectedDays.length; idx++) {
-    const day = selectedDays[idx];
-    let rows = '';
-    for (let p = 1; p <= timings.periodsPerDay; p++) {
-      const isBreak = isBreakPeriod(p, timings);
-      if (isBreak && !showBreaks) continue;
-      const time = getPeriodTime(p, timings);
-      const label = getPeriodLabel(p, timings);
-      const rowClass = isBreak ? ' class="brk"' : '';
-      rows += `<tr${rowClass}><td class="tp"><span class="pl">${esc(label)}</span><span class="tt-time">${esc(time)}</span></td>`;
-      if (isBreak) {
-        rows += `<td class="tb" colspan="${combos.length}" style="text-align:center;">&#9749; Break</td>`;
-        rows += '</tr>';
-        continue;
-      }
-      for (const combo of combos) {
-        const entry = entries.find((e: any) => e.day === day && e.period === p && e.classId === combo.classId && e.sectionId === combo.sectionId);
-        if (entry) {
-          const subj = getS(entry.subjectId);
-          const tchr = getT(entry.teacherId);
-          const sc = getSubjectPrintColor(entry.subjectId);
-          rows += `<td class="tf" style="background:${sc.bg};color:${sc.fg};border-left:2px solid ${sc.border};"><b>${esc(subj?.shortName || '?')}</b><span class="tn" style="color:${sc.fg};opacity:0.7;">${esc(tchr?.name || '?')}</span></td>`;
-        } else if (showEmpty) {
-          rows += '<td class="te">\u2014</td>';
-        } else {
-          rows += '<td></td>';
-        }
-      }
-      rows += '</tr>';
-    }
-
-    if (s.sheetsPerPage > 1) {
-      const isFirstOnPage = idx % s.sheetsPerPage === 0;
-      const dayHeaderHtml = isFirstOnPage
-        ? `<div class="page-header"><div class="header-bar"></div><div class="school-name">${esc(schoolName)}</div><div class="report-title">${esc(reportTitle)}</div><div class="report-sub">${esc(day)} | ${combos.length} class${combos.length !== 1 ? 'es' : ''}</div>${s.headerContent ? `<div class="custom-header">${esc(s.headerContent)}</div>` : ''}</div>`
-        : `<div class="sheet-label"><div class="sheet-label-title">${esc(day)}</div><div class="sheet-label-sub">${combos.length} class${combos.length !== 1 ? 'es' : ''}</div></div>`;
-      dayBlocksHtml += `
-    <div class="sheet-slot">
-      ${dayHeaderHtml}
-      <div class="day-block">
-        <table class="tt">
-          <thead><tr><th>Period</th>${combos.map((c) => `<th>${esc(c.label)}</th>`).join('')}</tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>
-    </div>`;
-    } else {
-      // Single sheet per page
-      dayBlocksHtml += `
-    <div class="day-block">
-      <div class="db"><div class="dh">${esc(day)}</div></div>
-      <table class="tt">
-        <thead><tr><th>Period</th>${combos.map((c) => `<th>${esc(c.label)}</th>`).join('')}</tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>`;
-    }
-  }
-
-  const customHeaderHtml = s.headerContent
-    ? `<div class="custom-header">${esc(s.headerContent)}</div>`
-    : '';
-  const customFooterHtml = s.footerContent
-    ? `<div class="custom-footer">${esc(s.footerContent)}</div>`
-    : '';
-  const bodyClass = s.sheetsPerPage > 1 ? ' class="sheets-multi"' : '';
-
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${buildTimetableCss(isLandscape, s.sheetsPerPage)}
-  .day-block { margin-bottom: 16px; page-break-inside: avoid; break-inside: avoid; }
-  .day-block .db { margin-bottom: 0; }
-  .day-block table.tt { margin-top: 0; }
-</style></head>
-<body${bodyClass}>
-  ${s.sheetsPerPage === 1 ? `<div class="page-header">
-    <div class="header-bar"></div>
-    <div class="school-name">${esc(schoolName)}</div>
-    <div class="report-title">${esc(reportTitle)}</div>
-    <div class="report-sub">${esc(daysLabel)} | ${combos.length} class${combos.length !== 1 ? 'es' : ''}</div>
-    ${customHeaderHtml}
-  </div>` : ''}
-  <div class="page-footer">
-    <span class="f-left">${esc(genTime)}</span>
-    <span class="f-center"><span class="watermark">Generated by TimetableWiz</span> &mdash; ${esc(schoolName)} &mdash; ${esc(reportTitle)}</span>
-    <span class="f-right">Page <span class="page-num"></span></span>
-  </div>
-  ${dayBlocksHtml}
-  ${customFooterHtml}
-</body></html>`;
-}
+    const subtitle = `${cls?.name || ''} — ${sec
