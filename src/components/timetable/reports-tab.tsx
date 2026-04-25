@@ -2071,22 +2071,22 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
   .timetable-page { height: calc(100vh - 30px); display: flex; flex-direction: column; page-break-before: auto; }
   .timetable-page + .timetable-page { page-break-before: always; break-before: page; }
   .timetable-page .page-header { flex-shrink: 0; }
-  .timetable-page .page-header .school-name { font-size: 22px; letter-spacing: 0.6px; }
-  .timetable-page .page-header .report-title { font-size: 13px; }
-  .timetable-page .page-header .report-sub { font-size: 11px; }
+  .timetable-page .page-header .school-name { font-size: 24px; letter-spacing: 0.6px; }
+  .timetable-page .page-header .report-title { font-size: 14px; }
+  .timetable-page .page-header .report-sub { font-size: 13px; }
   .timetable-page .page-header .header-bar { height: 2.5px; margin-bottom: 8px; }
   .timetable-page .page-header { padding-bottom: 8px; margin-bottom: 10px; }
   .timetable-page .custom-header { font-size: 9.5px; }
   .timetable-page table.tt { flex: 1; table-layout: fixed; height: auto; }
   .timetable-page table.tt td, .timetable-page table.tt th { height: auto; }
-  .timetable-page .tp { width: 80px; min-width: 80px; font-size: 8.5px; }
-  .timetable-page .pl { font-size: 8.5px; }
-  .timetable-page .tt-time { font-size: 6.5px; }
-  .timetable-page .tf { font-size: 10px; }
-  .timetable-page .tf b { font-size: 10px; }
-  .timetable-page .tn { font-size: 7px; }
-  .timetable-page table.tt th { font-size: 9px; padding: 5px 3px; }
-  .timetable-page table.tt td { padding: 4px 3px; }
+  .timetable-page .tp { width: 80px; min-width: 80px; font-size: 9.5px; }
+  .timetable-page .pl { font-size: 9.5px; }
+  .timetable-page .tt-time { font-size: 7.5px; }
+  .timetable-page .tf { font-size: 13px; }
+  .timetable-page .tf b { font-size: 13px; }
+  .timetable-page .tn { font-size: 10px; }
+  .timetable-page table.tt th { font-size: 11px; padding: 5px 3px; }
+  .timetable-page table.tt td { padding: 5px 3px; }
   .timetable-page ~ .page-footer { font-size: 8px; padding-top: 5px; border-top-width: 1.5px; }
   ` : '';
 
@@ -2098,8 +2098,9 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   /* ── Fonts ── */
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Lora:wght@700;800&display=swap');
   body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     font-size: 10.5px;
     line-height: 1.45;
     color: #111827;
@@ -2151,7 +2152,7 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
     font-weight: 800;
     color: #111827;
     letter-spacing: 0.6px;
-    font-family: Georgia, 'Times New Roman', 'Noto Serif', serif;
+    font-family: 'Lora', Georgia, 'Times New Roman', serif;
   }
   .page-header .report-title {
     font-size: 12px;
@@ -2161,14 +2162,15 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
   }
   .page-header .report-sub {
     font-size: 10px;
-    color: #6B7280;
+    color: #374151;
+    font-weight: 600;
     margin-top: 2px;
   }
   .custom-header {
     text-align: center;
     font-size: 9px;
-    color: #6B7280;
-    font-style: italic;
+    color: #374151;
+    font-weight: 500;
     margin-top: 3px;
   }
 
@@ -2191,10 +2193,10 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
     bottom: 0; left: 0; right: 0;
     display: table;
     width: 100%;
-    border-top: 1px solid #D4D4D8;
+    border-top: 1px solid #9CA3AF;
     padding-top: 4px;
     font-size: 7.5px;
-    color: #6B7280;
+    color: #374151;
     font-weight: 600;
   }
   .page-num::after { content: counter(page); }
@@ -2205,8 +2207,8 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
   .custom-footer {
     text-align: center;
     font-size: 7.5px;
-    color: #6B7280;
-    font-style: italic;
+    color: #374151;
+    font-weight: 500;
     margin-top: 6px;
   }
 
@@ -2217,7 +2219,7 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
     border: 1px solid #111827;
   }
   table.tt th, table.tt td {
-    border: 0.5px solid #D4D4D8;
+    border: 0.75px solid #9CA3AF;
     padding: 3px 2px;
     text-align: center;
     vertical-align: middle;
@@ -2254,7 +2256,7 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
   .tt-time {
     display: block;
     font-size: 6.5px;
-    color: #6B7280;
+    color: #4B5563;
     margin-top: 0.5px;
   }
 
@@ -2266,14 +2268,14 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
     font-weight: 700;
     letter-spacing: 0.2px;
   }
+  /* ── Class/teacher name under subject (filled cells) ── */
   .tn {
     display: block;
-    font-size: 7px;
-    color: #374151;
+    font-size: 8.5px;
+    color: #1F2937;
     margin-top: 0.5px;
-    font-weight: 400;
+    font-weight: 600;
     font-style: italic;
-    opacity: 0.85;
   }
 
   /* ── Break rows ── */
@@ -2308,16 +2310,16 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
     border: 1px solid #D4D4D8;
     border-top: 2px solid #111827;
   }
-  .sn2 { display: block; font-size: 18px; font-weight: 800; color: #111827; font-family: Georgia, serif; }
-  .sl { display: block; font-size: 7px; color: #6B7280; margin-top: 1px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .sn2 { display: block; font-size: 18px; font-weight: 800; color: #111827; font-family: 'Lora', Georgia, serif; }
+  .sl { display: block; font-size: 7px; color: #374151; margin-top: 1px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
 
   /* ── Cover page ── */
   .cover-page { text-align: center; padding: 40px 20px; page-break-after: always; break-after: page; }
-  .cover-page .cover-school { font-size: 26px; font-weight: 800; color: #111827; margin-bottom: 8px; letter-spacing: 0.5px; font-family: Georgia, serif; }
+  .cover-page .cover-school { font-size: 26px; font-weight: 800; color: #111827; margin-bottom: 8px; letter-spacing: 0.5px; font-family: 'Lora', Georgia, serif; }
   .cover-page .cover-title { font-size: 16px; font-weight: 600; color: #374151; margin-bottom: 6px; }
-  .cover-page .cover-date { font-size: 11px; color: #9CA3AF; margin-bottom: 20px; }
+  .cover-page .cover-date { font-size: 11px; color: #6B7280; margin-bottom: 20px; }
   .cover-page .cover-list { text-align: left; display: inline-block; max-width: 400px; }
-  .cover-page .cover-item { padding: 4px 0; font-size: 10px; color: #6B7280; border-bottom: 1px solid #E5E7EB; }
+  .cover-page .cover-item { padding: 4px 0; font-size: 10px; color: #374151; border-bottom: 1px solid #D1D5DB; }
 
   /* ── Day blocks ── */
   .db { margin-bottom: 8px; border: 1px solid #D4D4D8; overflow: hidden; border-left: 3px solid #111827; }
@@ -2330,7 +2332,7 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
     letter-spacing: 0.5px;
     text-transform: uppercase;
   }
-  .fc { font-weight: 400; font-size: 7px; color: #9CA3AF; margin-left: 5px; text-transform: none; letter-spacing: 0; }
+  .fc { font-weight: 400; font-size: 7px; color: #6B7280; margin-left: 5px; text-transform: none; letter-spacing: 0; }
   .di { display: flex; flex-wrap: wrap; gap: 5px; padding: 6px 8px; }
   .fi {
     padding: 3px 8px;
