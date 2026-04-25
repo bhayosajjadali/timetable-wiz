@@ -1,130 +1,174 @@
+
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-
-/* ========================================================================
-   Types
-   ======================================================================== */
-
-export interface PeriodTiming {
-  startTime: string;
-  endTime: string;
-  isBreak: boolean;
-  label?: string;
-}
-
-export interface Timings {
-  periodsPerDay: number;
-  startTime: string;
-  periodDuration: number;
-  periodTimingMode: 'automatic' | 'custom';
-  customPeriodTimings: PeriodTiming[];
-}
-
-export interface Teacher { id: string; name: string; shortName: string; }
-export interface Subject { id: string; name: string; shortName: string; }
-export interface Class { id: string; name: string; sectionIds: string[]; }
-export interface Section { id: string; name: string; classId: string; }
-export interface Assignment { id: string; teacherId: string; subjectId: string; classId: string; sectionId: string; }
-export interface Entry { id: string; day: string; period: number; teacherId: string; classId: string; sectionId: string; subjectId: string; }
-export interface Substitute { id: string; date: string; day: string; period: number; entryId: string; originalTeacherId: string; substituteTeacherId: string; classId: string; sectionId: string; subjectId: string; }
-
-export interface TimetableState {
-  schoolName: string;
-  organizationName: string;
-  academicYear: string;
-  headmasterName: string;
-  timings: Timings;
-  teachers: Teacher[];
-  subjects: Subject[];
-  classes: Class[];
-  sections: Section[];
-  assignments: Assignment[];
-  entries: Entry[];
-  substitutes: Substitute[];
-}
+import { 
+  Section, 
+  Class, 
+  Teacher, 
+  Subject, 
+  Timings, 
+  Assignment, 
+  Entry, 
+  Substitute, 
+  TimetableState 
+} from './types';
 
 export interface TimetableActions {
-  setSchoolInfo: (info: Partial<Pick<TimetableState, 'schoolName' | 'organizationName' | 'academicYear' | 'headmasterName'>>) => void;
+  setSchoolName: (name: string) => void;
   setTimings: (timings: Partial<Timings>) => void;
-  addTeacher: (name: string) => void;
-  updateTeacher: (id: string, name: string) => void;
-  deleteTeacher: (id: string) => void;
-  addSubject: (name: string) => void;
-  updateSubject: (id: string, name: string) => void;
-  deleteSubject: (id: string) => void;
-  addClass: (name: string) => void;
-  updateClass: (id: string, name: string) => void;
-  deleteClass: (id: string) => void;
-  addSection: (name: string, classId: string) => void;
-  updateSection: (id: string, name: string, classId?: string) => void;
+  
+  // Sections
+  addSection: (name: string) => void;
+  updateSection: (id: string, name: string) => void;
   deleteSection: (id: string) => void;
-  addAssignment: (t: string, s: string, c: string, sec: string) => void;
+  
+  // Classes
+  addClass: (name: string, sectionIds: string[]) => void;
+  updateClass: (id: string, name: string, sectionIds: string[]) => void;
+  deleteClass: (id: string) => void;
+  
+  // Teachers
+  addTeacher: (name: string, shortName: string) => void;
+  updateTeacher: (id: string, name: string, shortName: string) => void;
+  deleteTeacher: (id: string) => void;
+  
+  // Subjects
+  addSubject: (name: string, shortName: string) => void;
+  updateSubject: (id: string, name: string, shortName: string) => void;
+  deleteSubject: (id: string) => void;
+  
+  // Assignments
+  addAssignment: (assignment: Omit<Assignment, 'id'>) => void;
   deleteAssignment: (id: string) => void;
-  addEntry: (d: string, p: number, t: string, c: string, s: string, sub: string) => void;
+  updateAssignment: (id: string, assignment: Omit<Assignment, 'id'>) => void;
+  
+  // Entries
+  addEntry: (entry: Omit<Entry, 'id'>) => void;
   deleteEntry: (id: string) => void;
-  addSubstitute: (dt: string, dy: string, eid: string, ot: string, st: string) => void;
+  
+  // Substitutes
+  addSubstitute: (sub: Omit<Substitute, 'id'>) => void;
   deleteSubstitute: (id: string) => void;
-  importBackup: (data: unknown) => void;
+  
+  // Data Management
+  replaceAllData: (data: Partial<TimetableState>) => void;
   clearAllData: () => void;
 }
 
 export type TimetableStore = TimetableState & TimetableActions;
 
-/* ========================================================================
-   Helpers & Defaults
-   ======================================================================== */
-
 function generateId(): string {
-  return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 9);
-}
-
-function deriveShortName(name: string): string {
-  const words = name.trim().split(/\s+/);
-  return words.length === 1 ? words[0].substring(0, 3).toUpperCase() : words.map(w => w[0]).join('').substring(0, 3).toUpperCase();
+  return typeof crypto !== 'undefined' && crypto.randomUUID 
+    ? crypto.randomUUID() 
+    : Math.random().toString(36).substring(2, 9);
 }
 
 const DEFAULT_TIMINGS: Timings = {
-  periodsPerDay: 7,
+  periodsPerDay: 8,
   startTime: '08:00',
   periodDuration: 40,
-  periodTimingMode: 'automatic',
+  breakAfterPeriod: 4,
+  breakDuration: 20,
+  days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+  periodTimingMode: 'equal',
   customPeriodTimings: [],
 };
 
 const DEFAULT_STATE: TimetableState = {
-  schoolName: '',
-  organizationName: '',
-  academicYear: '',
-  headmasterName: '',
+  schoolName: 'My School',
   timings: DEFAULT_TIMINGS,
+  sections: [],
+  classes: [],
   teachers: [],
   subjects: [],
-  classes: [],
-  sections: [],
   assignments: [],
   entries: [],
   substitutes: [],
 };
 
-/* ========================================================================
-   Store Implementation
-   ======================================================================== */
-
 export const useTimetableStore = create<TimetableStore>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       ...DEFAULT_STATE,
-      setSchoolInfo: (info) => set({ ...info }),
+      
+      setSchoolName: (schoolName) => set({ schoolName }),
       setTimings: (timings) => set((state) => ({ timings: { ...state.timings, ...timings } })),
       
-      // ... (Rest of your logic remains same, just ensure it uses DEFAULT_TIMINGS)
-      addTeacher: (name) => set(s => ({ teachers: [...s.teachers, { id: generateId(), name, shortName: deriveShortName(name) }] })),
-      addClass: (name) => set(s => ({ classes: [...s.classes, { id: generateId(), name, sectionIds: [] }] })),
-      addSection: (name, classId) => set(s => ({ sections: [...s.sections, { id: generateId(), name, classId }] })),
-      // Simplified for brevity, add back your full logic for entries/substitutes here
+      addSection: (name) => set((state) => ({ 
+        sections: [...state.sections, { id: generateId(), name }] 
+      })),
+      updateSection: (id, name) => set((state) => ({
+        sections: state.sections.map(s => s.id === id ? { ...s, name } : s)
+      })),
+      deleteSection: (id) => set((state) => ({
+        sections: state.sections.filter(s => s.id !== id),
+        classes: state.classes.map(c => ({
+          ...c,
+          sectionIds: c.sectionIds.filter(sid => sid !== id)
+        }))
+      })),
       
-      clearAllData: () => set({ ...DEFAULT_STATE }),
-      importBackup: (data: any) => set({ ...data }), 
+      addClass: (name, sectionIds) => set((state) => ({
+        classes: [...state.classes, { id: generateId(), name, sectionIds }]
+      })),
+      updateClass: (id, name, sectionIds) => set((state) => ({
+        classes: state.classes.map(c => c.id === id ? { ...c, name, sectionIds } : c)
+      })),
+      deleteClass: (id) => set((state) => ({
+        classes: state.classes.filter(c => c.id !== id)
+      })),
+      
+      addTeacher: (name, shortName) => set((state) => ({
+        teachers: [...state.teachers, { id: generateId(), name, shortName }]
+      })),
+      updateTeacher: (id, name, shortName) => set((state) => ({
+        teachers: state.teachers.map(t => t.id === id ? { ...t, name, shortName } : t)
+      })),
+      deleteTeacher: (id) => set((state) => ({
+        teachers: state.teachers.filter(t => t.id !== id)
+      })),
+      
+      addSubject: (name, shortName) => set((state) => ({
+        subjects: [...state.subjects, { id: generateId(), name, shortName }]
+      })),
+      updateSubject: (id, name, shortName) => set((state) => ({
+        subjects: state.subjects.map(s => s.id === id ? { ...s, name, shortName } : s)
+      })),
+      deleteSubject: (id) => set((state) => ({
+        subjects: state.subjects.filter(s => s.id !== id)
+      })),
+      
+      addAssignment: (assignment) => set((state) => ({
+        assignments: [...state.assignments, { ...assignment, id: generateId() }]
+      })),
+      deleteAssignment: (id) => set((state) => ({
+        assignments: state.assignments.filter(a => a.id !== id)
+      })),
+      updateAssignment: (id, assignment) => set((state) => ({
+        assignments: state.assignments.map(a => a.id === id ? { ...a, ...assignment } : a)
+      })),
+      
+      addEntry: (entry) => set((state) => ({
+        entries: [...state.entries, { ...entry, id: generateId() }]
+      })),
+      deleteEntry: (id) => set((state) => ({
+        entries: state.entries.filter(e => e.id !== id)
+      })),
+      
+      addSubstitute: (sub) => set((state) => ({
+        substitutes: [...state.substitutes, { ...sub, id: generateId() }]
+      })),
+      deleteSubstitute: (id) => set((state) => ({
+        substitutes: state.substitutes.filter(s => s.id !== id)
+      })),
+      
+      clearAllData: () => set(DEFAULT_STATE),
+      
+      replaceAllData: (data) => {
+        const newTimings = { ...DEFAULT_STATE.timings, ...(data.timings || {}) };
+        const newState = { ...DEFAULT_STATE, ...data, timings: newTimings };
+        set(newState);
+      },
     }),
     {
       name: 'timetable-wiz-data',
