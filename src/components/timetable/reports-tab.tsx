@@ -1179,19 +1179,17 @@ function buildPeriodCountReportHtml(params: {
 <head>
 <meta charset="utf-8">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700;800&display=swap');
   @page {
     size: A4 ${isLandscape ? 'landscape' : 'portrait'};
     margin: 10mm 10mm 14mm 10mm;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     font-size: ${fontSize};
     line-height: 1.45;
-    color: #1E293B;
+    color: #111827;
     background: #fff;
-    -webkit-font-smoothing: antialiased;
   }
   ${tablesPerPage > 1 ? `
   body.sheets-multi-pc {
@@ -1207,13 +1205,12 @@ function buildPeriodCountReportHtml(params: {
     min-height: 0;
     page-break-inside: avoid;
     break-inside: avoid;
-    border: 1px solid #B8C5D6;
-    border-radius: 5px;
+    border: 1px solid #D4D4D8;
+    border-radius: 3px;
     padding: 4px 6px;
     margin-bottom: 3px;
     overflow: hidden;
     contain: layout paint;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
   }
   body.sheets-multi-pc .sheet-slot:nth-child(${tablesPerPage}n) {
     page-break-after: always;
@@ -1231,51 +1228,47 @@ function buildPeriodCountReportHtml(params: {
     text-align: center;
     padding-bottom: 6px;
     margin-bottom: 8px;
-    border-bottom: 2.5px solid #1E40AF;
+    border-bottom: 2px solid #111827;
     position: relative;
   }
   .report-header::after {
     content: '';
     display: block;
     margin-top: 3px;
-    height: 1.5px;
-    background: linear-gradient(to right, transparent, #3B82F6, transparent);
+    height: 1px;
+    background: #D4D4D8;
   }
   .school-name {
     font-size: ${isLandscape ? '17px' : '15px'};
     font-weight: 800;
-    color: #0F172A;
+    color: #111827;
     letter-spacing: 0.5px;
-    font-family: 'Playfair Display', Georgia, 'Times New Roman', serif;
+    font-family: Georgia, 'Times New Roman', serif;
   }
   .report-title {
     font-size: ${isLandscape ? '12px' : '11px'};
     font-weight: 600;
-    color: #1E40AF;
+    color: #374151;
     margin-top: 2px;
-    font-family: 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   }
   .report-subtitle {
     font-size: ${headerFontSize};
-    color: #64748B;
+    color: #6B7280;
     margin-top: 1px;
-    font-family: 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   }
   .custom-header {
     text-align: center;
     font-size: ${headerFontSize};
-    color: #64748B;
+    color: #6B7280;
     font-style: italic;
     margin-bottom: 4px;
-    font-family: 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   }
   .custom-footer {
     text-align: center;
     font-size: ${headerFontSize};
-    color: #64748B;
+    color: #6B7280;
     font-style: italic;
     margin-top: 4px;
-    font-family: 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   }
 
   /* ── Period Count Table ── */
@@ -1284,11 +1277,10 @@ function buildPeriodCountReportHtml(params: {
     border-collapse: collapse;
     font-size: ${fontSize};
     table-layout: fixed;
-    border: 1.5px solid #1E40AF;
-    font-family: 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    border: 1px solid #111827;
   }
   .pc-table th, .pc-table td {
-    border: 0.5px solid #CBD5E1;
+    border: 0.5px solid #D4D4D8;
     padding: ${cellPad};
     text-align: center;
     vertical-align: middle;
@@ -1297,14 +1289,13 @@ function buildPeriodCountReportHtml(params: {
   /* ── Table Headers ── */
   .th-sno {
     width: 22px;
-    background: linear-gradient(180deg, #475569 0%, #1E293B 100%);
+    background: #374151;
     color: #fff;
     font-size: ${headerFontSize};
     font-weight: 600;
-    text-shadow: 0 1px 1px rgba(0,0,0,0.1);
   }
   .th-name {
-    background: linear-gradient(180deg, #2563EB 0%, #1E3A8A 100%);
+    background: #111827;
     color: #fff;
     font-size: ${headerFontSize};
     font-weight: 600;
@@ -1314,14 +1305,14 @@ function buildPeriodCountReportHtml(params: {
     letter-spacing: 0.5px;
   }
   .th-short {
-    background: linear-gradient(180deg, #2563EB 0%, #1E3A8A 100%);
+    background: #111827;
     color: #fff;
     font-size: ${headerFontSize};
     font-weight: 600;
     width: 40px;
   }
   .th-day {
-    background: linear-gradient(180deg, #2563EB 0%, #1E3A8A 100%);
+    background: #111827;
     color: #fff;
     font-size: ${headerFontSize};
     font-weight: 600;
@@ -1329,14 +1320,14 @@ function buildPeriodCountReportHtml(params: {
     letter-spacing: 0.5px;
   }
   .th-total {
-    background: linear-gradient(180deg, #2563EB 0%, #1E3A8A 100%);
-    color: white;
+    background: #111827;
+    color: #fff;
     font-size: ${headerFontSize};
     font-weight: 700;
     width: 36px;
   }
   .th-detail {
-    background: linear-gradient(180deg, #2563EB 0%, #1E3A8A 100%);
+    background: #111827;
     color: #fff;
     font-size: ${headerFontSize};
     font-weight: 600;
@@ -1346,8 +1337,8 @@ function buildPeriodCountReportHtml(params: {
   /* ── Data cells ── */
   .td-sno {
     font-size: ${headerFontSize};
-    color: #94A3B8;
-    background: #F1F5F9;
+    color: #9CA3AF;
+    background: #F3F4F6;
   }
   .td-name {
     text-align: left !important;
@@ -1355,14 +1346,14 @@ function buildPeriodCountReportHtml(params: {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    color: #1E293B;
+    color: #111827;
     letter-spacing: 0.2px;
   }
   .td-short {
     font-weight: 600;
     font-size: ${fontSize};
-    background: #F1F5F9;
-    color: #475569;
+    background: #F3F4F6;
+    color: #374151;
   }
   .td-num {
     font-weight: 700;
@@ -1370,25 +1361,25 @@ function buildPeriodCountReportHtml(params: {
     letter-spacing: 0.3px;
   }
   .td-num.zero {
-    background: linear-gradient(135deg, #FEF2F2 0%, #FECACA 100%);
-    color: #991B1B;
+    background: #F3F4F6;
+    color: #9CA3AF;
     font-weight: 800;
   }
   .td-num.full {
-    background: linear-gradient(135deg, #ECFDF5 0%, #A7F3D0 100%);
-    color: #065F46;
+    background: #E5E7EB;
+    color: #111827;
   }
   .td-total {
-    background: linear-gradient(135deg, #EFF6FF 0%, #BFDBFE 100%);
+    background: #F3F4F6;
     font-size: ${fontSize};
     font-weight: 800;
-    color: #0F172A;
-    border-left: 1.5px solid #1E40AF !important;
+    color: #111827;
+    border-left: 1.5px solid #111827 !important;
   }
   .td-detail {
     text-align: left !important;
     font-size: ${headerFontSize};
-    color: #64748B;
+    color: #6B7280;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1399,24 +1390,24 @@ function buildPeriodCountReportHtml(params: {
   /* ── Alternating rows ── */
   .pc-table tbody tr:nth-child(even) .td-name,
   .pc-table tbody tr:nth-child(even) .td-num,
-  .pc-table tbody tr:nth-child(even) .td-detail { background: #F8FAFC; }
+  .pc-table tbody tr:nth-child(even) .td-detail { background: #FAFAFA; }
   .pc-table tbody tr:nth-child(even) .td-sno,
-  .pc-table tbody tr:nth-child(even) .td-short { background: #E2E8F0; }
+  .pc-table tbody tr:nth-child(even) .td-short { background: #E5E7EB; }
 
   .table-chunk { padding: 0 4px; }
-  .chunk-title { font-size: ${headerFontSize}; font-weight: 600; text-align: center; margin-bottom: 3px; color: #0F172A; }
+  .chunk-title { font-size: ${headerFontSize}; font-weight: 600; text-align: center; margin-bottom: 3px; color: #111827; }
 
   .sheet-slot { width: 100%; page-break-inside: avoid; break-inside: avoid; }
   .sheet-label-pc {
     text-align: center;
     padding: 2px 0 3px;
     margin-bottom: 3px;
-    border-bottom: 2px solid #3B82F6;
+    border-bottom: 1.5px solid #111827;
     font-size: ${headerFontSize};
     font-weight: 600;
-    color: #0F172A;
+    color: #111827;
     letter-spacing: 0.5px;
-    font-family: 'Playfair Display', Georgia, 'Times New Roman', serif;
+    font-family: Georgia, 'Times New Roman', serif;
   }
 
   /* ── Summary bar ── */
@@ -1424,38 +1415,36 @@ function buildPeriodCountReportHtml(params: {
   .summary-item {
     text-align: center;
     padding: 4px 12px;
-    background: linear-gradient(135deg, #F8FAFC 0%, #EFF6FF 100%);
-    border-radius: 8px;
-    border: 1px solid #BFDBFE;
-    border-top: 2px solid #2563EB;
+    background: #F9FAFB;
+    border-radius: 4px;
+    border: 1px solid #D4D4D8;
+    border-top: 2px solid #111827;
   }
   .summary-num {
     display: block;
     font-size: 14px;
     font-weight: 800;
-    color: #0F172A;
-    font-family: 'Playfair Display', Georgia, serif;
+    color: #111827;
+    font-family: Georgia, serif;
   }
   .summary-label {
     display: block;
     font-size: ${headerFontSize};
-    color: #64748B;
+    color: #6B7280;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    font-family: 'Inter', sans-serif;
   }
 
   .report-footer {
     margin-top: 10px;
     padding-top: 6px;
-    border-top: 1.5px solid #CBD5E1;
+    border-top: 1px solid #D4D4D8;
     display: flex;
     justify-content: space-between;
     font-size: ${headerFontSize};
-    color: #94A3B8;
-    font-family: 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    color: #9CA3AF;
   }
-  .watermark { font-size: 7px; color: #CBD5E1; font-style: italic; }
+  .watermark { font-size: 7px; color: #D4D4D8; font-style: italic; }
 
   @media print {
     body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -2050,39 +2039,7 @@ function esc(str: string): string {
 
 /* ---------- Shared professional CSS for timetable grid reports ---------- */
 
-/* Print-safe pastel palette for subject cells — vibrant yet readable */
-const SUBJECT_COLORS: { bg: string; fg: string; border: string }[] = [
-  { bg: '#E8D5F5', fg: '#4A148C', border: '#BA68C8' },  // Violet
-  { bg: '#D4ECFC', fg: '#0A3D91', border: '#64B5F6' },  // Sky Blue
-  { bg: '#D5F0D8', fg: '#1B5E20', border: '#81C784' },  // Green
-  { bg: '#FFECD2', fg: '#BF360C', border: '#FFB74D' },  // Peach
-  { bg: '#FDE4ED', fg: '#880E4F', border: '#F06292' },  // Rose
-  { bg: '#CCFBF1', fg: '#004D40', border: '#4DB6AC' },  // Teal
-  { bg: '#FFF3CC', fg: '#E65100', border: '#FFB300' },  // Amber
-  { bg: '#DDE4F7', fg: '#1A237E', border: '#7986CB' },  // Indigo
-  { bg: '#FFE0D6', fg: '#BF360C', border: '#FF8A65' },  // Coral
-  { bg: '#E8F5D6', fg: '#33691E', border: '#9CCC65' },  // Lime
-  { bg: '#E0F7FA', fg: '#006064', border: '#26C6DA' },  // Cyan
-  { bg: '#FFF9C4', fg: '#827717', border: '#DCE775' },  // Yellow
-  { bg: '#F3E5F5', fg: '#6A1B9A', border: '#AB47BC' },  // Purple
-  { bg: '#E1F5FE', fg: '#01579B', border: '#29B6F6' },  // Light Blue
-  { bg: '#F1F8E9', fg: '#33691E', border: '#AED581' },  // Sage
-  { bg: '#ECEFF1', fg: '#263238', border: '#90A4AE' },  // Blue Gray
-];
-
-function getSubjectPrintColor(subjectId: string): { bg: string; fg: string; border: string } {
-  let hash = 0;
-  for (let i = 0; i < subjectId.length; i++) {
-    hash = ((hash << 5) - hash) + subjectId.charCodeAt(i);
-    hash |= 0;
-  }
-  return SUBJECT_COLORS[Math.abs(hash) % SUBJECT_COLORS.length];
-}
-
 function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string {
-  /* Google Fonts import for professional typography */
-  const fontImport = `@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700;800&display=swap');`;
-
   const nUpCss = sheetsPerPage > 1 ? `
   body.sheets-multi {
     display: flex;
@@ -2097,13 +2054,12 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
     min-height: 0;
     page-break-inside: avoid;
     break-inside: avoid;
-    border: 1px solid #B8C5D6;
-    border-radius: 5px;
+    border: 1px solid #D4D4D8;
+    border-radius: 3px;
     padding: 6px 8px;
     margin-bottom: 3px;
     overflow: hidden;
     contain: layout paint;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
   }
   body.sheets-multi .sheet-slot:nth-child(${sheetsPerPage}n) {
     page-break-after: always;
@@ -2116,7 +2072,6 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
   }` : '\n  body.sheets-multi .sheet-slot { width: 100%; }';
 
   return `
-  ${fontImport}
   @page {
     size: A4 ${isLandscape ? 'landscape' : 'portrait'};
     margin: 10mm 10mm 14mm 10mm;
@@ -2125,12 +2080,11 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
 
   /* ── Fonts ── */
   body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     font-size: 9.5px;
     line-height: 1.45;
-    color: #1E293B;
+    color: #111827;
     background: #fff;
-    -webkit-font-smoothing: antialiased;
   }
 
   ${nUpCss}
@@ -2168,38 +2122,34 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
   }
   .page-header .header-bar {
     width: 100%;
-    height: 3px;
-    background: linear-gradient(to right, transparent 2%, #1E40AF 15%, #3B82F6 35%, #6366F1 50%, #3B82F6 65%, #1E40AF 85%, transparent 98%);
-    border-radius: 2px;
+    height: 2px;
+    background: #111827;
     margin-bottom: 6px;
   }
   .page-header .school-name {
     font-size: 17px;
     font-weight: 800;
-    color: #0F172A;
+    color: #111827;
     letter-spacing: 0.5px;
-    font-family: 'Playfair Display', Georgia, 'Times New Roman', serif;
+    font-family: Georgia, 'Times New Roman', 'Noto Serif', serif;
   }
   .page-header .report-title {
-    font-size: 11px;
+    font-size: 10.5px;
     font-weight: 600;
-    color: #1E40AF;
+    color: #374151;
     margin-top: 2px;
-    font-family: 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   }
   .page-header .report-sub {
     font-size: 9px;
-    color: #64748B;
+    color: #6B7280;
     margin-top: 1px;
-    font-family: 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   }
   .custom-header {
     text-align: center;
     font-size: 8px;
-    color: #64748B;
+    color: #6B7280;
     font-style: italic;
     margin-top: 3px;
-    font-family: 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   }
 
   /* ── Compact sheet label ── */
@@ -2207,19 +2157,18 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
     text-align: center;
     padding: 2px 0 4px;
     margin-bottom: 4px;
-    border-bottom: 2px solid #3B82F6;
+    border-bottom: 1.5px solid #111827;
   }
   .sheet-label-title {
     font-size: 10px;
     font-weight: 700;
-    color: #0F172A;
+    color: #111827;
     letter-spacing: 0.5px;
-    font-family: 'Playfair Display', Georgia, 'Times New Roman', serif;
+    font-family: Georgia, 'Times New Roman', serif;
   }
   .sheet-label-sub {
     font-size: 7.5px;
-    color: #64748B;
-    font-family: 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    color: #6B7280;
   }
 
   /* ── Footer ── */
@@ -2228,36 +2177,31 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
     bottom: 0; left: 0; right: 0;
     display: table;
     width: 100%;
-    border-top: 1.5px solid #CBD5E1;
+    border-top: 1px solid #D4D4D8;
     padding-top: 3px;
     font-size: 6.5px;
-    color: #94A3B8;
-    font-family: 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    color: #9CA3AF;
   }
   .page-footer .f-left   { display: table-cell; text-align: left;   width: 33%; padding: 0 6px; }
   .page-footer .f-center { display: table-cell; text-align: center; width: 34%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .page-footer .f-right  { display: table-cell; text-align: right;  width: 33%; padding: 0 6px; }
-  .watermark { color: #CBD5E1; font-style: italic; letter-spacing: 0.3px; }
+  .watermark { color: #D4D4D8; font-style: italic; letter-spacing: 0.3px; }
   .custom-footer {
     text-align: center;
     font-size: 7.5px;
-    color: #64748B;
+    color: #6B7280;
     font-style: italic;
     margin-top: 6px;
-    font-family: 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   }
 
   /* ── Timetable grid ── */
   table.tt {
     width: 100%;
     border-collapse: collapse;
-    border: 1.5px solid #1E40AF;
-    border-radius: 4px;
-    overflow: hidden;
-    font-family: 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    border: 1px solid #111827;
   }
   table.tt th, table.tt td {
-    border: 0.5px solid #CBD5E1;
+    border: 0.5px solid #D4D4D8;
     padding: 3px 2px;
     text-align: center;
     vertical-align: middle;
@@ -2265,45 +2209,42 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
 
   /* ── Table header row ── */
   table.tt th {
-    background: linear-gradient(180deg, #2563EB 0%, #1E3A8A 100%);
+    background: #111827;
     font-size: 7.5px;
     font-weight: 700;
     color: #fff;
     letter-spacing: 0.5px;
     text-transform: uppercase;
     padding: 4px 3px;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.2);
   }
   table.tt th:first-child {
-    background: linear-gradient(180deg, #475569 0%, #1E293B 100%);
+    background: #374151;
   }
 
   /* ── Period label column ── */
   .tp {
-    background: #F1F5F9 !important;
+    background: #F3F4F6 !important;
     font-size: 7.5px;
     width: 66px;
     min-width: 66px;
-    border-right: 1.5px solid #94A3B8 !important;
+    border-right: 1px solid #9CA3AF !important;
   }
   .pl {
     display: block;
     font-weight: 700;
-    color: #1E293B;
+    color: #111827;
     font-size: 7.5px;
   }
   .tt-time {
     display: block;
     font-size: 5.5px;
-    color: #64748B;
+    color: #6B7280;
     margin-top: 0.5px;
-    font-family: 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   }
 
   /* ── Subject cells (filled) ── */
   .tf {
     font-size: 8.5px;
-    border-radius: 0;
   }
   .tf b {
     font-weight: 700;
@@ -2312,78 +2253,77 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
   .tn {
     display: block;
     font-size: 6px;
-    color: #475569;
+    color: #4B5563;
     margin-top: 0.5px;
-    font-weight: 500;
+    font-weight: 400;
     font-style: italic;
-    opacity: 0.8;
+    opacity: 0.75;
   }
 
   /* ── Break rows ── */
   .tb {
     font-size: 8px;
-    color: #92400E;
-    background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 50%, #FCD34D 100%) !important;
+    color: #374151;
+    background: #F3F4F6 !important;
     font-style: italic;
     font-weight: 600;
     letter-spacing: 0.5px;
   }
   .brk td {
-    background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 50%, #FCD34D 100%) !important;
-    border-color: #F59E0B !important;
+    background: #F3F4F6 !important;
+    border-color: #D4D4D8 !important;
   }
 
   /* ── Empty cells ── */
-  .te { color: #E2E8F0; }
+  .te { color: #D4D4D8; }
 
   /* ── Alternating row striping ── */
   table.tt tbody tr:nth-child(even) td.te,
-  table.tt tbody tr:nth-child(even) td.tf { background: #F8FAFC; }
-  table.tt tbody tr:nth-child(even) td.tp { background: #E2E8F0 !important; }
+  table.tt tbody tr:nth-child(even) td.tf { background: #FAFAFA; }
+  table.tt tbody tr:nth-child(even) td.tp { background: #E5E7EB !important; }
 
   /* ── Summary stats ── */
   .sr { display: flex; gap: 10px; margin-bottom: 10px; justify-content: center; }
   .si {
     text-align: center;
     padding: 6px 16px;
-    background: linear-gradient(135deg, #F8FAFC 0%, #EFF6FF 100%);
-    border-radius: 8px;
-    border: 1px solid #BFDBFE;
-    border-top: 2.5px solid #2563EB;
+    background: #F9FAFB;
+    border-radius: 4px;
+    border: 1px solid #D4D4D8;
+    border-top: 2px solid #111827;
   }
-  .sn2 { display: block; font-size: 18px; font-weight: 800; color: #0F172A; font-family: 'Playfair Display', Georgia, serif; }
-  .sl { display: block; font-size: 7px; color: #64748B; margin-top: 1px; text-transform: uppercase; letter-spacing: 0.5px; font-family: 'Inter', sans-serif; }
+  .sn2 { display: block; font-size: 18px; font-weight: 800; color: #111827; font-family: Georgia, serif; }
+  .sl { display: block; font-size: 7px; color: #6B7280; margin-top: 1px; text-transform: uppercase; letter-spacing: 0.5px; }
 
   /* ── Cover page ── */
   .cover-page { text-align: center; padding: 40px 20px; page-break-after: always; break-after: page; }
-  .cover-page .cover-school { font-size: 26px; font-weight: 800; color: #0F172A; margin-bottom: 8px; letter-spacing: 0.5px; font-family: 'Playfair Display', Georgia, serif; }
-  .cover-page .cover-title { font-size: 16px; font-weight: 600; color: #1E40AF; margin-bottom: 6px; font-family: 'Inter', sans-serif; }
-  .cover-page .cover-date { font-size: 11px; color: #94A3B8; margin-bottom: 20px; }
+  .cover-page .cover-school { font-size: 26px; font-weight: 800; color: #111827; margin-bottom: 8px; letter-spacing: 0.5px; font-family: Georgia, serif; }
+  .cover-page .cover-title { font-size: 16px; font-weight: 600; color: #374151; margin-bottom: 6px; }
+  .cover-page .cover-date { font-size: 11px; color: #9CA3AF; margin-bottom: 20px; }
   .cover-page .cover-list { text-align: left; display: inline-block; max-width: 400px; }
-  .cover-page .cover-item { padding: 4px 0; font-size: 10px; color: #64748B; border-bottom: 1px solid #E2E8F0; }
+  .cover-page .cover-item { padding: 4px 0; font-size: 10px; color: #6B7280; border-bottom: 1px solid #E5E7EB; }
 
   /* ── Day blocks ── */
-  .db { margin-bottom: 8px; border: 1px solid #CBD5E1; border-radius: 6px; overflow: hidden; border-left: 3.5px solid #3B82F6; }
+  .db { margin-bottom: 8px; border: 1px solid #D4D4D8; overflow: hidden; border-left: 3px solid #111827; }
   .dh {
-    background: linear-gradient(135deg, #2563EB 0%, #1E3A8A 100%);
+    background: #111827;
     padding: 5px 8px;
     font-weight: 700;
     font-size: 9.5px;
     color: #fff;
     letter-spacing: 0.5px;
     text-transform: uppercase;
-    font-family: 'Inter', sans-serif;
   }
-  .fc { font-weight: 500; font-size: 7px; color: #BFDBFE; margin-left: 5px; text-transform: none; letter-spacing: 0; }
+  .fc { font-weight: 400; font-size: 7px; color: #9CA3AF; margin-left: 5px; text-transform: none; letter-spacing: 0; }
   .di { display: flex; flex-wrap: wrap; gap: 5px; padding: 6px 8px; }
   .fi {
     padding: 3px 8px;
-    background: linear-gradient(135deg, #ECFDF5 0%, #A7F3D0 100%);
-    border: 1px solid #6EE7B7;
-    border-radius: 10px;
+    background: #F3F4F6;
+    border: 1px solid #D4D4D8;
+    border-radius: 3px;
     font-size: 7.5px;
     font-weight: 600;
-    color: #065F46;
+    color: #111827;
     letter-spacing: 0.3px;
   }
 
@@ -2447,8 +2387,7 @@ function buildCombinedClassTimetableHtml(
         if (entry) {
           const subj = getS(entry.subjectId);
           const tchr = getT(entry.teacherId);
-          const sc = getSubjectPrintColor(entry.subjectId);
-          rows += `<td class="tf" style="background:${sc.bg};color:${sc.fg};border-left:2px solid ${sc.border};"><b>${esc(subj?.shortName || '?')}</b><span class="tn" style="color:${sc.fg};opacity:0.7;">${esc(tchr?.name || '?')}</span></td>`;
+          rows += `<td class="tf"><b>${esc(subj?.shortName || '?')}</b><span class="tn">${esc(tchr?.name || '?')}</span></td>`;
         } else if (showEmpty) {
           rows += '<td class="te">\u2014</td>';
         } else {
@@ -2552,8 +2491,7 @@ function buildCombinedTeacherScheduleHtml(
           const subj = getS(entry.subjectId);
           const cls = getC(entry.classId);
           const sec = getSec(entry.sectionId);
-          const sc = getSubjectPrintColor(entry.subjectId);
-          rows += `<td class="tf" style="background:${sc.bg};color:${sc.fg};border-left:2px solid ${sc.border};"><b>${esc(subj?.shortName || '?')}</b><span class="tn" style="color:${sc.fg};opacity:0.7;">${esc(cls?.name || '')}-${esc(sec?.name || '')}</span></td>`;
+          rows += `<td class="tf"><b>${esc(subj?.shortName || '?')}</b><span class="tn">${esc(cls?.name || '')}-${esc(sec?.name || '')}</span></td>`;
         } else if (showEmpty) {
           rows += '<td class="te">\u2014</td>';
         } else {
@@ -2645,8 +2583,7 @@ function buildClassTimetableHtml(
       if (entry) {
         const subj = getS(entry.subjectId);
         const tchr = getT(entry.teacherId);
-        const sc = getSubjectPrintColor(entry.subjectId);
-        rows += `<td class="tf" style="background:${sc.bg};color:${sc.fg};border-left:2px solid ${sc.border};"><b>${esc(subj?.shortName || '?')}</b><span class="tn" style="color:${sc.fg};opacity:0.7;">${esc(tchr?.name || '?')}</span></td>`;
+        rows += `<td class="tf"><b>${esc(subj?.shortName || '?')}</b><span class="tn">${esc(tchr?.name || '?')}</span></td>`;
       } else if (showEmpty) {
         rows += '<td class="te">\u2014</td>';
       } else {
@@ -2723,8 +2660,7 @@ function buildTeacherScheduleHtml(
         const subj = getS(entry.subjectId);
         const cls = getC(entry.classId);
         const sec = getSec(entry.sectionId);
-        const sc = getSubjectPrintColor(entry.subjectId);
-        rows += `<td class="tf" style="background:${sc.bg};color:${sc.fg};border-left:2px solid ${sc.border};"><b>${esc(subj?.shortName || '?')}</b><span class="tn" style="color:${sc.fg};opacity:0.7;">${esc(cls?.name || '')}-${esc(sec?.name || '')}</span></td>`;
+        rows += `<td class="tf"><b>${esc(subj?.shortName || '?')}</b><span class="tn">${esc(cls?.name || '')}-${esc(sec?.name || '')}</span></td>`;
       } else if (showEmpty) {
         rows += '<td class="te">\u2014</td>';
       } else {
@@ -2811,8 +2747,7 @@ function buildDaywiseScheduleHtml(
         if (entry) {
           const subj = getS(entry.subjectId);
           const tchr = getT(entry.teacherId);
-          const sc = getSubjectPrintColor(entry.subjectId);
-          rows += `<td class="tf" style="background:${sc.bg};color:${sc.fg};border-left:2px solid ${sc.border};"><b>${esc(subj?.shortName || '?')}</b><span class="tn" style="color:${sc.fg};opacity:0.7;">${esc(tchr?.name || '?')}</span></td>`;
+          rows += `<td class="tf"><b>${esc(subj?.shortName || '?')}</b><span class="tn">${esc(tchr?.name || '?')}</span></td>`;
         } else if (showEmpty) {
           rows += '<td class="te">\u2014</td>';
         } else {
