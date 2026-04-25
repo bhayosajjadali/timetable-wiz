@@ -1,4 +1,4 @@
-const CACHE_NAME = 'timetable-wiz-v2';
+const CACHE_NAME = 'timetable-wiz-v3';
 const BASE = '/timetable-wiz';
 const STATIC_ASSETS = [
   BASE + '/',
@@ -32,6 +32,9 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   // Skip non-GET requests
   if (event.request.method !== 'GET') return;
+
+  // Pass CDN requests directly to network (no caching)
+  if (event.request.url.includes('cdnjs.cloudflare.com')) return;
 
   // Skip chrome-extension and other non-http requests
   if (!event.request.url.startsWith('http')) return;
