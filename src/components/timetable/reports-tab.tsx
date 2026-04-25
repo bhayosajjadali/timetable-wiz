@@ -1198,24 +1198,20 @@ function buildPeriodCountReportHtml(params: {
     gap: 0;
     height: 100vh;
     overflow: hidden;
+    padding-bottom: 14px;
   }
   body.sheets-multi-pc .sheet-slot {
-    flex: 0 0 calc(100vh / ${tablesPerPage});
-    max-height: calc(100vh / ${tablesPerPage});
+    flex: 1 1 0;
+    max-height: calc((100vh - 14px) / ${tablesPerPage});
     min-height: 0;
     page-break-inside: avoid;
     break-inside: avoid;
-    border: 1px solid #D4D4D8;
-    border-radius: 3px;
-    padding: 4px 6px;
-    margin-bottom: 3px;
+    padding: 2px 0;
     overflow: hidden;
-    contain: layout paint;
   }
   body.sheets-multi-pc .sheet-slot:nth-child(${tablesPerPage}n) {
     page-break-after: always;
     break-after: page;
-    margin-bottom: 0;
   }
   body.sheets-multi-pc .sheet-slot:last-child {
     page-break-after: auto;
@@ -2047,29 +2043,41 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
     gap: 0;
     height: 100vh;
     overflow: hidden;
+    padding-bottom: 14px;
   }
   body.sheets-multi .sheet-slot {
-    flex: 0 0 calc(100vh / ${sheetsPerPage});
-    max-height: calc(100vh / ${sheetsPerPage});
+    flex: 1 1 0;
+    max-height: calc((100vh - 14px) / ${sheetsPerPage});
     min-height: 0;
     page-break-inside: avoid;
     break-inside: avoid;
-    border: 1px solid #D4D4D8;
-    border-radius: 3px;
-    padding: 6px 8px;
-    margin-bottom: 3px;
+    padding: 2px 0;
     overflow: hidden;
-    contain: layout paint;
   }
   body.sheets-multi .sheet-slot:nth-child(${sheetsPerPage}n) {
     page-break-after: always;
     break-after: page;
-    margin-bottom: 0;
   }
   body.sheets-multi .sheet-slot:last-child {
     page-break-after: auto;
     break-after: auto;
   }` : '\n  body.sheets-multi .sheet-slot { width: 100%; }';
+
+  /* ── Landscape single-sheet: table fills full A4 page ── */
+  const landscapeCss = isLandscape && sheetsPerPage === 1 ? `
+  .timetable-page { height: calc(100vh - 30px); display: flex; flex-direction: column; }
+  .timetable-page .page-header { flex-shrink: 0; }
+  .timetable-page table.tt { flex: 1; table-layout: fixed; height: auto; }
+  .timetable-page table.tt td, .timetable-page table.tt th { height: auto; }
+  .timetable-page .tp { width: 80px; min-width: 80px; font-size: 8.5px; }
+  .timetable-page .pl { font-size: 8.5px; }
+  .timetable-page .tt-time { font-size: 6.5px; }
+  .timetable-page .tf { font-size: 10px; }
+  .timetable-page .tf b { font-size: 10px; }
+  .timetable-page .tn { font-size: 7px; }
+  .timetable-page table.tt th { font-size: 9px; padding: 5px 3px; }
+  .timetable-page table.tt td { padding: 4px 3px; }
+  ` : '';
 
   return `
   @page {
@@ -2088,6 +2096,8 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
   }
 
   ${nUpCss}
+
+  ${landscapeCss}
 
   /* ── Compact headers in multi-sheet mode ── */
   body.sheets-multi .page-header {
