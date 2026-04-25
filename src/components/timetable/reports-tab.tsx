@@ -16,35 +16,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useTimetableStore } from '@/lib/store';
 import { getSubjectColor, getPeriodTime, isBreakPeriod, getPeriodLabel } from '@/lib/timetable-utils';
 import { useToast } from '@/hooks/use-toast';
 import {
   Printer,
-  Clock,
   Coffee,
   UserCheck,
   CalendarDays,
   Download,
   Loader2,
   Search,
-  Filter,
   BarChart3,
   GraduationCap,
   Settings2,
   RotateCcw,
   ChevronsUpDown,
   Check,
+  FileText,
 } from 'lucide-react';
 import {
   Popover,
@@ -147,30 +137,54 @@ function CheckDropdown({
 }
 
 /* ====================================================================
-   ReportsTab — Tab-based layout with global toolbar
+   Shared type
+   ==================================================================== */
+
+type DetailMode = 'count-only' | 'show-periods' | 'show-total';
+
+/* ====================================================================
+   ReportsTab — 3-tab layout: Timetables | Period Count | PDF Export
    ==================================================================== */
 
 export function ReportsTab() {
-  const [activeTab, setActiveTab] = useState('class-timetable');
+  const [activeTab, setActiveTab] = useState('timetables');
+
+  // ── Timetables tab state ──
+  const [viewMode, setViewMode] = useState<'class' | 'teacher'>('class');
   const [searchQuery, setSearchQuery] = useState('');
   const [showBreaks, setShowBreaks] = useState(true);
   const [showEmpty, setShowEmpty] = useState(true);
-  const { settings: printSettings, updateSettings, resetSettings } = usePrintSettings();
+  const [selectedClassSectionKeys, setSelectedClassSectionKeys] = useState<string[]>([]);
+  const [selectedTeacherIds, setSelectedTeacherIds] = useState<string[]>([]);
+
+  // ── PDF Export tab state ──
+  const [exportType, setExportType] = useState<'class' | 'teacher' | 'period-count' | 'daywise'>('class');
+  const [exportShowBreaks, setExportShowBreaks] = useState(true);
+  const [exportShowEmpty, setExportShowEmpty] = useState(true);
+  const [exportOrientation, setExportOrientation] = useState<'portrait' | 'landscape'>('portrait');
+  const [exportSheetsPerPage, setExportSheetsPerPage] = useState(1);
+  const [exportHeaderContent, setExportHeaderContent] = useState('');
+  const [exportFooterContent, setExportFooterContent] = useState('');
+  const [exportSelectedClasses, setExportSelectedClasses] = useState<string[]>([]);
+  const [exportSelectedTeachers, setExportSelectedTeachers] = useState<string[]>([]);
+  const [exportSelectedDays, setExportSelectedDays] = useState<string[]>([]);
+  const [exportDetailMode, setExportDetailMode] = useState<DetailMode>('show-periods');
+  const [exportDaywiseDays, setExportDaywiseDays] = useState<string[]>([]);
+  const [exportDaywiseClasses, setExportDaywiseClasses] = useState<string[]>([]);
+
+  const { toast } = useToast();
+  const { downloadPdf, isGenerating } = usePdfDownload();
 
   const { classes, sections, teachers, timings } = useTimetableStore();
   const availableClasses = classes.filter((c) => c.sectionIds.length > 0);
 
-  // Per-report-type item selections
-  const [selectedClassSectionKeys, setSelectedClassSectionKeys] = useState<string[]>([]);
-  const [selectedTeacherIdsForSchedule, setSelectedTeacherIdsForSchedule] = useState<string[]>([]);
-  const [selectedDayIds, setSelectedDayIds] = useState<string[]>([]);
-  const [selectedDaywiseClassSectionKeys, setSelectedDaywiseClassSectionKeys] = useState<string[]>([]);
-
+  // ── Helpers ──
   const toggleItem = (setter: React.Dispatch<React.SetStateAction<string[]>>) => (value: string) =>
     setter((prev) => prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]);
   const selectAllItems = (setter: React.Dispatch<React.SetStateAction<string[]>>, all: string[]) => () =>
     setter((prev) => prev.length === all.length ? [] : [...all]);
 
+  // ── Filtered options ──
   const filteredClasses = useMemo(() => {
     if (!searchQuery.trim()) return availableClasses;
     const q = searchQuery.toLowerCase();
@@ -183,7 +197,6 @@ export function ReportsTab() {
     return teachers.filter((t) => t.name.toLowerCase().includes(q) || t.shortName.toLowerCase().includes(q));
   }, [teachers, searchQuery]);
 
-  // Build flattened class+section combos
   const classSectionOpts = useMemo(() => {
     const opts: { value: string; label: string; classId: string; sectionId: string }[] = [];
     for (const cls of filteredClasses) {
@@ -204,94 +217,249 @@ export function ReportsTab() {
   const allDayKeys = dayOpts.map((o) => o.value);
   const allTeacherKeys = teacherOpts.map((o) => o.value);
 
-  // Resolve selected combos for rendering
+  // ── Visible items for Timetables tab ──
   const visibleClassSections = useMemo(() => {
     if (selectedClassSectionKeys.length === 0) return classSectionOpts;
     return classSectionOpts.filter((o) => selectedClassSectionKeys.includes(o.value));
   }, [selectedClassSectionKeys, classSectionOpts]);
 
   const visibleTeachers = useMemo(() => {
-    if (selectedTeacherIdsForSchedule.length === 0) return filteredTeachers;
-    return filteredTeachers.filter((t) => selectedTeacherIdsForSchedule.includes(t.id));
-  }, [selectedTeacherIdsForSchedule, filteredTeachers]);
+    if (selectedTeacherIds.length === 0) return filteredTeachers;
+    return filteredTeachers.filter((t) => selectedTeacherIds.includes(t.id));
+  }, [selectedTeacherIds, filteredTeachers]);
 
-  const visibleDaywiseCombos = useMemo(() => {
-    if (selectedDaywiseClassSectionKeys.length === 0) return classSectionOpts;
-    return classSectionOpts.filter((o) => selectedDaywiseClassSectionKeys.includes(o.value));
-  }, [selectedDaywiseClassSectionKeys, classSectionOpts]);
+  // ── PDF Export: build PrintSettings object ──
+  const exportSettings: PrintSettings = useMemo(() => ({
+    orientation: exportOrientation,
+    sheetsPerPage: exportSheetsPerPage,
+    headerContent: exportHeaderContent,
+    footerContent: exportFooterContent,
+  }), [exportOrientation, exportSheetsPerPage, exportHeaderContent, exportFooterContent]);
+
+  // ── PDF Export: build HTML and trigger action ──
+  const handleExport = useCallback(async (action: 'print' | 'download') => {
+    const store = useTimetableStore.getState();
+    const { schoolName, timings: storeTimings, entries, teachers: storeTeachers, classes: storeClasses, sections: storeSections, subjects } = store;
+    let html = '';
+    let title = '';
+
+    try {
+      switch (exportType) {
+        case 'class': {
+          const combos = exportSelectedClasses.length === 0
+            ? classSectionOpts
+            : classSectionOpts.filter((o) => exportSelectedClasses.includes(o.value));
+          if (combos.length === 0) {
+            toast({ title: 'Nothing to export', description: 'Select at least one class to export.', variant: 'destructive' });
+            return;
+          }
+          html = buildCombinedClassTimetableHtml(schoolName, combos, store, exportShowBreaks, exportShowEmpty, exportSettings);
+          title = `Class_Timetables_${combos.length}`;
+          break;
+        }
+        case 'teacher': {
+          const teacherList = exportSelectedTeachers.length === 0
+            ? storeTeachers
+            : storeTeachers.filter((t) => exportSelectedTeachers.includes(t.id));
+          if (teacherList.length === 0) {
+            toast({ title: 'Nothing to export', description: 'Select at least one teacher to export.', variant: 'destructive' });
+            return;
+          }
+          html = buildCombinedTeacherScheduleHtml(schoolName, teacherList, store, exportShowBreaks, exportShowEmpty, exportSettings);
+          title = `Teacher_Schedules_${teacherList.length}`;
+          break;
+        }
+        case 'period-count': {
+          const activeDays = storeTimings.days;
+          const effectiveDays = exportSelectedDays.length === 0 ? activeDays : activeDays.filter((d) => exportSelectedDays.includes(d));
+          if (effectiveDays.length === 0) {
+            toast({ title: 'Nothing to export', description: 'Select at least one day to export.', variant: 'destructive' });
+            return;
+          }
+          const teacherData = computeTeacherPeriodData(storeTeachers, entries, activeDays, effectiveDays, storeTimings, subjects, storeClasses, storeSections);
+          html = buildPeriodCountReportHtml({
+            schoolName,
+            teacherData,
+            filteredSelectedDays: effectiveDays,
+            activeDays,
+            orientation: exportOrientation,
+            tablesPerPage: exportSheetsPerPage,
+            detailMode: exportDetailMode,
+            nonBreakPeriodsCount: countNonBreakPeriods(storeTimings),
+            maxPossiblePerTeacher: effectiveDays.length * countNonBreakPeriods(storeTimings),
+            teachersCount: storeTeachers.length,
+            printSettings: exportSettings,
+            timings: storeTimings,
+          });
+          title = `Period_Count_${effectiveDays.length}days`;
+          break;
+        }
+        case 'daywise': {
+          const activeDays = storeTimings.days;
+          const effectiveDays = exportDaywiseDays.length === 0 ? activeDays : activeDays.filter((d) => exportDaywiseDays.includes(d));
+          const combos = exportDaywiseClasses.length === 0
+            ? classSectionOpts
+            : classSectionOpts.filter((o) => exportDaywiseClasses.includes(o.value));
+          if (effectiveDays.length === 0 || combos.length === 0) {
+            toast({ title: 'Nothing to export', description: 'Select at least one day and one class to export.', variant: 'destructive' });
+            return;
+          }
+          html = buildDaywiseScheduleHtml(
+            schoolName, effectiveDays, combos,
+            storeTimings, entries, storeTeachers, storeClasses, storeSections, subjects,
+            exportShowBreaks, exportShowEmpty, exportSettings
+          );
+          title = `Daywise_Schedule_${effectiveDays.length}days`;
+          break;
+        }
+      }
+
+      if (!html) return;
+
+      if (action === 'print') {
+        await printViaIframe(html, title);
+        toast({ title: 'Print dialog opened', description: 'Use the print dialog to print or save as PDF.' });
+      } else {
+        await downloadPdf(html, `${title}.pdf`, exportOrientation);
+      }
+    } catch (err) {
+      console.error('Export failed:', err);
+      toast({ title: 'Export failed', description: 'An error occurred. Please try again.', variant: 'destructive' });
+    }
+  }, [exportType, exportShowBreaks, exportShowEmpty, exportOrientation, exportSheetsPerPage, exportHeaderContent, exportFooterContent, exportSelectedClasses, exportSelectedTeachers, exportSelectedDays, exportDetailMode, exportDaywiseDays, exportDaywiseClasses, classSectionOpts, exportSettings, toast, downloadPdf]);
+
+  // ── PDF Export summary text ──
+  const exportSummary = useMemo(() => {
+    const parts: string[] = [];
+    switch (exportType) {
+      case 'class': {
+        const count = exportSelectedClasses.length || classSectionOpts.length;
+        parts.push(`${count} class timetable${count !== 1 ? 's' : ''} selected`);
+        break;
+      }
+      case 'teacher': {
+        const count = exportSelectedTeachers.length || teachers.length;
+        parts.push(`${count} teacher schedule${count !== 1 ? 's' : ''} selected`);
+        break;
+      }
+      case 'period-count': {
+        const daysCount = exportSelectedDays.length || timings.days.length;
+        parts.push(`${daysCount} day${daysCount !== 1 ? 's' : ''} selected`);
+        const modeLabels: Record<DetailMode, string> = { 'count-only': 'Count Only', 'show-periods': 'Show Periods', 'show-total': 'Totals Summary' };
+        parts.push(modeLabels[exportDetailMode]);
+        break;
+      }
+      case 'daywise': {
+        const daysCount = exportDaywiseDays.length || timings.days.length;
+        const classCount = exportDaywiseClasses.length || classSectionOpts.length;
+        parts.push(`${daysCount} day${daysCount !== 1 ? 's' : ''}, ${classCount} class${classCount !== 1 ? 'es' : ''}`);
+        break;
+      }
+    }
+    parts.push(exportOrientation === 'landscape' ? 'Landscape' : 'Portrait');
+    parts.push(`${exportSheetsPerPage} sheet${exportSheetsPerPage !== 1 ? 's' : ''}/page`);
+    return parts.join(', ');
+  }, [exportType, exportSelectedClasses, exportSelectedTeachers, exportSelectedDays, exportDetailMode, exportDaywiseDays, exportDaywiseClasses, exportOrientation, exportSheetsPerPage, classSectionOpts, teachers, timings.days]);
 
   return (
     <div className="space-y-4">
-
-      {/* ── Tabs ── */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <TabsList className="flex-wrap h-auto gap-1">
-            <TabsTrigger value="class-timetable" className="gap-1.5">
-              <GraduationCap className="h-3.5 w-3.5" />
-              Class Timetable
-            </TabsTrigger>
-            <TabsTrigger value="teacher-schedule" className="gap-1.5">
-              <UserCheck className="h-3.5 w-3.5" />
-              Teacher Schedule
-            </TabsTrigger>
-            <TabsTrigger value="teacher-period-count" className="gap-1.5">
-              <BarChart3 className="h-3.5 w-3.5" />
-              Period Count
-            </TabsTrigger>
-            <TabsTrigger value="daywise" className="gap-1.5">
-              <CalendarDays className="h-3.5 w-3.5" />
-              Daywise
-            </TabsTrigger>
-          </TabsList>
+        <TabsList className="flex-wrap h-auto gap-1">
+          <TabsTrigger value="timetables" className="gap-1.5">
+            <GraduationCap className="h-3.5 w-3.5" />
+            Timetables
+          </TabsTrigger>
+          <TabsTrigger value="period-count" className="gap-1.5">
+            <BarChart3 className="h-3.5 w-3.5" />
+            Period Count
+          </TabsTrigger>
+          <TabsTrigger value="pdf-export" className="gap-1.5">
+            <Download className="h-3.5 w-3.5" />
+            PDF Export
+          </TabsTrigger>
+        </TabsList>
 
-          {/* Global filters — visible on timetable tabs */}
-          {(activeTab === 'class-timetable' || activeTab === 'teacher-schedule' || activeTab === 'daywise') && (
-            <div className="flex items-center gap-2 ml-auto flex-wrap">
-              <label className="flex items-center gap-1.5 cursor-pointer rounded-md border px-2.5 py-1 hover:bg-muted/50 transition-colors">
-                <Checkbox checked={showBreaks} onCheckedChange={(v) => setShowBreaks(!!v)} className="h-3.5 w-3.5" />
-                <span className="text-xs">Breaks</span>
-              </label>
-              <label className="flex items-center gap-1.5 cursor-pointer rounded-md border px-2.5 py-1 hover:bg-muted/50 transition-colors">
-                <Checkbox checked={showEmpty} onCheckedChange={(v) => setShowEmpty(!!v)} className="h-3.5 w-3.5" />
-                <span className="text-xs">Empty</span>
-              </label>
-              <div className="relative w-40">
-                <Input
-                  placeholder="Search..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="h-8 text-xs pl-7"
-                />
-                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
-              </div>
-              <PrintSettingsDialog
-                settings={printSettings}
-                onUpdate={updateSettings}
-                onReset={resetSettings}
-              >
-                <Button variant="outline" size="sm" className="h-8 gap-1.5">
-                  <Settings2 className="h-3.5 w-3.5" />
-                  <span className="text-xs hidden sm:inline">Print</span>
-                </Button>
-              </PrintSettingsDialog>
-            </div>
-          )}
-        </div>
-
-        {/* ── Class Timetable Tab ── */}
-        <TabsContent value="class-timetable">
+        {/* ═══════════════════════════════════════════════════════════════
+            Tab 1: Timetables
+            ═══════════════════════════════════════════════════════════════ */}
+        <TabsContent value="timetables">
+          {/* View mode toggle + global filters */}
           <Card>
             <CardHeader className="pb-3">
-              <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center justify-between flex-wrap gap-3">
                 <div>
                   <CardTitle className="text-base flex items-center gap-2">
                     <GraduationCap className="h-4 w-4" />
-                    Class Timetables
+                    Timetables
                   </CardTitle>
-                  <CardDescription>Select class + section combos to generate timetables</CardDescription>
+                  <CardDescription>View class and teacher timetables</CardDescription>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
+                  {/* View mode toggle */}
+                  <div className="flex rounded-md border overflow-hidden">
+                    <button
+                      onClick={() => setViewMode('class')}
+                      className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                        viewMode === 'class'
+                          ? 'bg-[#1B2A4A] text-white'
+                          : 'bg-background hover:bg-muted text-muted-foreground'
+                      }`}
+                    >
+                      Class View
+                    </button>
+                    <button
+                      onClick={() => setViewMode('teacher')}
+                      className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                        viewMode === 'teacher'
+                          ? 'bg-[#1B2A4A] text-white'
+                          : 'bg-background hover:bg-muted text-muted-foreground'
+                      }`}
+                    >
+                      Teacher View
+                    </button>
+                  </div>
+
+                  <Separator orientation="vertical" className="h-6" />
+
+                  {/* Search */}
+                  <div className="relative w-40">
+                    <Input
+                      placeholder="Search..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="h-8 text-xs pl-7"
+                    />
+                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                  </div>
+
+                  {/* Breaks checkbox */}
+                  <label className="flex items-center gap-1.5 cursor-pointer rounded-md border px-2.5 py-1 hover:bg-muted/50 transition-colors">
+                    <Checkbox checked={showBreaks} onCheckedChange={(v) => setShowBreaks(!!v)} className="h-3.5 w-3.5" />
+                    <span className="text-xs">Breaks</span>
+                  </label>
+
+                  {/* Empty checkbox */}
+                  <label className="flex items-center gap-1.5 cursor-pointer rounded-md border px-2.5 py-1 hover:bg-muted/50 transition-colors">
+                    <Checkbox checked={showEmpty} onCheckedChange={(v) => setShowEmpty(!!v)} className="h-3.5 w-3.5" />
+                    <span className="text-xs">Empty</span>
+                  </label>
+                </div>
+              </div>
+            </CardHeader>
+          </Card>
+
+          {/* Class View */}
+          {viewMode === 'class' && (
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <GraduationCap className="h-4 w-4" />
+                      Class Timetables
+                    </CardTitle>
+                    <CardDescription>Select class + section combos to view timetables</CardDescription>
+                  </div>
                   <CheckDropdown
                     label="Classes"
                     icon={GraduationCap}
@@ -303,168 +471,429 @@ export function ReportsTab() {
                     searchable
                   />
                 </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {visibleClassSections.length > 0 && (
-                <div className="flex gap-2 flex-wrap">
-                  <DownloadAllButton
-                    label="Download All Selected as PDF"
-                    onClick={() => {
-                      const { schoolName } = useTimetableStore.getState();
-                      const html = buildCombinedClassTimetableHtml(
-                        schoolName,
-                        visibleClassSections,
-                        useTimetableStore.getState(),
-                        showBreaks,
-                        showEmpty,
-                        printSettings
-                      );
-                      printViaIframe(html, 'Class_Timetables_Combined');
-                    }}
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {selectedClassSectionKeys.length === 0 && classSectionOpts.length > 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-6">
+                    Showing all classes. Use the dropdown above to filter, or go to PDF Export to print/download.
+                  </p>
+                )}
+                {visibleClassSections.map((combo) => (
+                  <ClassTimetableReport
+                    key={combo.value}
+                    classId={combo.classId}
+                    sectionId={combo.sectionId}
+                    showBreaks={showBreaks}
+                    showEmpty={showEmpty}
                   />
-                </div>
-              )}
-              {selectedClassSectionKeys.length === 0 && classSectionOpts.length > 0 && (
-                <p className="text-sm text-muted-foreground text-center py-6">Select one or more class + section combos above, or view all classes.</p>
-              )}
-              {visibleClassSections.map((combo) => (
-                <ClassTimetableReport
-                  key={combo.value}
-                  classId={combo.classId}
-                  sectionId={combo.sectionId}
-                  showBreaks={showBreaks}
-                  showEmpty={showEmpty}
-                />
-              ))}
-            </CardContent>
-          </Card>
-        </TabsContent>
+                ))}
+              </CardContent>
+            </Card>
+          )}
 
-        {/* ── Teacher Schedule Tab ── */}
-        <TabsContent value="teacher-schedule">
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <div>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <UserCheck className="h-4 w-4" />
-                    Teacher Schedules
-                  </CardTitle>
-                  <CardDescription>Weekly teaching schedules</CardDescription>
-                </div>
-                <CheckDropdown
-                  label="Teachers"
-                  icon={UserCheck}
-                  options={teacherOpts}
-                  selected={selectedTeacherIdsForSchedule}
-                  onToggle={toggleItem(setSelectedTeacherIdsForSchedule)}
-                  onSelectAll={selectAllItems(setSelectedTeacherIdsForSchedule, allTeacherKeys)}
-                  allLabel="All Teachers"
-                  searchable
-                />
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {visibleTeachers.length > 0 && (
-                <div className="flex gap-2 flex-wrap">
-                  <DownloadAllButton
-                    label="Download All Selected as PDF"
-                    onClick={() => {
-                      const { schoolName } = useTimetableStore.getState();
-                      const html = buildCombinedTeacherScheduleHtml(
-                        schoolName,
-                        visibleTeachers,
-                        useTimetableStore.getState(),
-                        showBreaks,
-                        showEmpty,
-                        printSettings
-                      );
-                      printViaIframe(html, 'Teacher_Schedules_Combined');
-                    }}
-                  />
-                </div>
-              )}
-              {selectedTeacherIdsForSchedule.length === 0 && teacherOpts.length > 0 && (
-                <p className="text-sm text-muted-foreground text-center py-6">Select one or more teachers above, or view all teachers.</p>
-              )}
-              {visibleTeachers.map((t) => (
-                <TeacherScheduleReport key={t.id} teacherId={t.id} showBreaks={showBreaks} showEmpty={showEmpty} />
-              ))}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* ── Daywise Schedule Tab ── */}
-        <TabsContent value="daywise">
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <div>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <CalendarDays className="h-4 w-4" />
-                    Daywise Schedule
-                  </CardTitle>
-                  <CardDescription>View timetables for selected days</CardDescription>
-                </div>
-                <div className="flex items-center gap-2 flex-wrap">
+          {/* Teacher View */}
+          {viewMode === 'teacher' && (
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <UserCheck className="h-4 w-4" />
+                      Teacher Schedules
+                    </CardTitle>
+                    <CardDescription>Weekly teaching schedules</CardDescription>
+                  </div>
                   <CheckDropdown
-                    label="Days"
-                    icon={CalendarDays}
-                    options={dayOpts}
-                    selected={selectedDayIds}
-                    onToggle={toggleItem(setSelectedDayIds)}
-                    onSelectAll={selectAllItems(setSelectedDayIds, allDayKeys)}
-                    allLabel="All Days"
-                  />
-                  <CheckDropdown
-                    label="Classes"
-                    options={classSectionOpts}
-                    selected={selectedDaywiseClassSectionKeys}
-                    onToggle={toggleItem(setSelectedDaywiseClassSectionKeys)}
-                    onSelectAll={selectAllItems(setSelectedDaywiseClassSectionKeys, allClassSectionKeys)}
-                    allLabel="All Classes"
+                    label="Teachers"
+                    icon={UserCheck}
+                    options={teacherOpts}
+                    selected={selectedTeacherIds}
+                    onToggle={toggleItem(setSelectedTeacherIds)}
+                    onSelectAll={selectAllItems(setSelectedTeacherIds, allTeacherKeys)}
+                    allLabel="All Teachers"
                     searchable
                   />
                 </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {selectedDayIds.length === 0 && (
-                <p className="text-sm text-muted-foreground text-center py-6">Select one or more days above, or choose &quot;All Days&quot;.</p>
-              )}
-              {selectedDayIds.length > 0 && (
-                <DaywiseScheduleReport
-                  selectedDays={selectedDayIds}
-                  selectedClassSectionKeys={selectedDaywiseClassSectionKeys}
-                  classSectionOpts={classSectionOpts}
-                  showBreaks={showBreaks}
-                  showEmpty={showEmpty}
-                />
-              )}
-            </CardContent>
-          </Card>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {selectedTeacherIds.length === 0 && teacherOpts.length > 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-6">
+                    Showing all teachers. Use the dropdown above to filter, or go to PDF Export to print/download.
+                  </p>
+                )}
+                {visibleTeachers.map((t) => (
+                  <TeacherScheduleReport key={t.id} teacherId={t.id} showBreaks={showBreaks} showEmpty={showEmpty} />
+                ))}
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
-        {/* ── Period Count Tab ── */}
-        <TabsContent value="teacher-period-count">
+        {/* ═══════════════════════════════════════════════════════════════
+            Tab 2: Period Count
+            ═══════════════════════════════════════════════════════════════ */}
+        <TabsContent value="period-count">
           <TeacherPeriodCountReport />
+        </TabsContent>
+
+        {/* ═══════════════════════════════════════════════════════════════
+            Tab 3: PDF Export
+            ═══════════════════════════════════════════════════════════════ */}
+        <TabsContent value="pdf-export">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {/* ── Left: Configuration ── */}
+            <div className="lg:col-span-2 space-y-4">
+              {/* Report Type */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <FileText className="h-4 w-4" />
+                    Report Type
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {([
+                      ['class', 'Class Timetable', GraduationCap],
+                      ['teacher', 'Teacher Schedule', UserCheck],
+                      ['period-count', 'Period Count', BarChart3],
+                      ['daywise', 'Daywise Schedule', CalendarDays],
+                    ] as const).map(([value, label, Icon]) => (
+                      <button
+                        key={value}
+                        onClick={() => setExportType(value)}
+                        className={`flex flex-col items-center gap-1.5 px-3 py-3 rounded-lg border text-center transition-colors ${
+                          exportType === value
+                            ? 'bg-[#1B2A4A10] border-[#1B2A4A30]'
+                            : 'border-border hover:bg-muted/50'
+                        }`}
+                      >
+                        <Icon className={`h-4 w-4 ${exportType === value ? 'text-[#1B2A4A]' : 'text-muted-foreground'}`} />
+                        <span className={`text-xs font-medium ${exportType === value ? 'text-[#1B2A4A]' : ''}`}>{label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Dynamic selectors based on report type */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Selection</CardTitle>
+                  <CardDescription>Choose what to include in the export</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Class Timetable: class selection */}
+                  {exportType === 'class' && (
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <Label className="text-sm">Class + Section</Label>
+                      <CheckDropdown
+                        label="Classes"
+                        icon={GraduationCap}
+                        options={classSectionOpts}
+                        selected={exportSelectedClasses}
+                        onToggle={toggleItem(setExportSelectedClasses)}
+                        onSelectAll={selectAllItems(setExportSelectedClasses, allClassSectionKeys)}
+                        allLabel="All Classes"
+                        searchable
+                      />
+                    </div>
+                  )}
+
+                  {/* Teacher Schedule: teacher selection */}
+                  {exportType === 'teacher' && (
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <Label className="text-sm">Teachers</Label>
+                      <CheckDropdown
+                        label="Teachers"
+                        icon={UserCheck}
+                        options={teacherOpts}
+                        selected={exportSelectedTeachers}
+                        onToggle={toggleItem(setExportSelectedTeachers)}
+                        onSelectAll={selectAllItems(setExportSelectedTeachers, allTeacherKeys)}
+                        allLabel="All Teachers"
+                        searchable
+                      />
+                    </div>
+                  )}
+
+                  {/* Period Count: day selection + display mode */}
+                  {exportType === 'period-count' && (
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Select Days</Label>
+                          <div className="flex gap-2">
+                            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setExportSelectedDays([...allDayKeys])}>All</Button>
+                            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setExportSelectedDays([])}>None</Button>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {timings.days.map((day) => (
+                            <label
+                              key={day}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border cursor-pointer transition-colors text-sm ${
+                                exportSelectedDays.includes(day)
+                                  ? 'bg-[#1B2A4A10] border-[#1B2A4A30] text-[#1B2A4A] font-medium'
+                                  : 'border-border hover:bg-muted/50 text-muted-foreground'
+                              }`}
+                            >
+                              <Checkbox checked={exportSelectedDays.includes(day)} onCheckedChange={() => toggleItem(setExportSelectedDays)(day)} />
+                              <span>{day.slice(0, 3)}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <Separator />
+                      <div className="space-y-2">
+                        <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Display Mode</Label>
+                        <div className="flex flex-wrap gap-2">
+                          {([
+                            ['count-only', 'Count Only', 'Just period numbers'],
+                            ['show-periods', 'Show Periods', 'Include period details'],
+                            ['show-total', 'Totals Summary', 'Total counts per day'],
+                          ] as [DetailMode, string, string][]).map(([mode, label, desc]) => (
+                            <button
+                              key={mode}
+                              onClick={() => setExportDetailMode(mode)}
+                              className={`px-3 py-2 rounded-lg border text-left transition-colors ${
+                                exportDetailMode === mode
+                                  ? 'bg-[#1B2A4A10] border-[#1B2A4A30]'
+                                  : 'border-border hover:bg-muted/50'
+                              }`}
+                            >
+                              <div className={`text-sm font-medium ${exportDetailMode === mode ? 'text-[#1B2A4A]' : ''}`}>{label}</div>
+                              <div className="text-[10px] text-muted-foreground">{desc}</div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Daywise: day selection + class selection */}
+                  {exportType === 'daywise' && (
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Select Days</Label>
+                          <div className="flex gap-2">
+                            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setExportDaywiseDays([...allDayKeys])}>All</Button>
+                            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setExportDaywiseDays([])}>None</Button>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {timings.days.map((day) => (
+                            <label
+                              key={day}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border cursor-pointer transition-colors text-sm ${
+                                exportDaywiseDays.includes(day)
+                                  ? 'bg-[#1B2A4A10] border-[#1B2A4A30] text-[#1B2A4A] font-medium'
+                                  : 'border-border hover:bg-muted/50 text-muted-foreground'
+                              }`}
+                            >
+                              <Checkbox checked={exportDaywiseDays.includes(day)} onCheckedChange={() => toggleItem(setExportDaywiseDays)(day)} />
+                              <span>{day.slice(0, 3)}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <Separator />
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <Label className="text-sm">Class + Section</Label>
+                        <CheckDropdown
+                          label="Classes"
+                          icon={GraduationCap}
+                          options={classSectionOpts}
+                          selected={exportDaywiseClasses}
+                          onToggle={toggleItem(setExportDaywiseClasses)}
+                          onSelectAll={selectAllItems(setExportDaywiseClasses, allClassSectionKeys)}
+                          allLabel="All Classes"
+                          searchable
+                        />
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Export Settings */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Settings2 className="h-4 w-4" />
+                    Export Settings
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Page Orientation</Label>
+                      <Select value={exportOrientation} onValueChange={(v) => setExportOrientation(v as 'portrait' | 'landscape')}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="portrait">Portrait (default)</SelectItem>
+                          <SelectItem value="landscape">Landscape</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-[10px] text-muted-foreground">
+                        {exportOrientation === 'portrait' ? 'Vertical A4 layout — ideal for timetables' : 'Horizontal A4 layout — ideal for wide tables'}
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Sheets per Page</Label>
+                      <Select value={String(exportSheetsPerPage)} onValueChange={(v) => setExportSheetsPerPage(Number(v))}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="1">1 sheet per page</SelectItem>
+                          <SelectItem value="2">2 sheets per page</SelectItem>
+                          <SelectItem value="3">3 sheets per page</SelectItem>
+                          <SelectItem value="4">4 sheets per page</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-[10px] text-muted-foreground">
+                        Multiple sheets stack vertically on one page
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <Checkbox checked={exportShowBreaks} onCheckedChange={(v) => setExportShowBreaks(!!v)} />
+                      <span className="text-sm">Show Breaks</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <Checkbox checked={exportShowEmpty} onCheckedChange={(v) => setExportShowEmpty(!!v)} />
+                      <span className="text-sm">Show Empty Cells</span>
+                    </label>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Customization */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Customization</CardTitle>
+                  <CardDescription>Add optional header and footer text to the exported report</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Custom Header</Label>
+                    <Textarea
+                      placeholder="Optional text for the report header (e.g. school motto, academic year)"
+                      value={exportHeaderContent}
+                      onChange={(e) => setExportHeaderContent(e.target.value)}
+                      rows={2}
+                      className="text-sm"
+                    />
+                    <p className="text-[10px] text-muted-foreground">Leave blank to use the default header</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Custom Footer</Label>
+                    <Textarea
+                      placeholder="Optional text for the report footer (e.g. principal signature, contact info)"
+                      value={exportFooterContent}
+                      onChange={(e) => setExportFooterContent(e.target.value)}
+                      rows={2}
+                      className="text-sm"
+                    />
+                    <p className="text-[10px] text-muted-foreground">Leave blank to use the default footer (date + page number)</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* ── Right: Summary + Actions ── */}
+            <div className="space-y-4">
+              {/* Summary */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Export Summary</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-sm">
+                      <Badge variant="secondary" className="text-xs">
+                        {exportType === 'class' ? 'Class Timetable' : exportType === 'teacher' ? 'Teacher Schedule' : exportType === 'period-count' ? 'Period Count' : 'Daywise Schedule'}
+                      </Badge>
+                    </div>
+                    <Separator />
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      {exportSummary}
+                    </p>
+                    {exportHeaderContent && (
+                      <>
+                        <Separator />
+                        <div>
+                          <span className="text-xs font-medium text-muted-foreground">Header: </span>
+                          <span className="text-xs">{exportHeaderContent}</span>
+                        </div>
+                      </>
+                    )}
+                    {exportFooterContent && (
+                      <>
+                        <Separator />
+                        <div>
+                          <span className="text-xs font-medium text-muted-foreground">Footer: </span>
+                          <span className="text-xs">{exportFooterContent}</span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Action buttons */}
+              <Card>
+                <CardContent className="pt-6 space-y-3">
+                  <Button
+                    className="w-full gap-2"
+                    size="lg"
+                    disabled={isGenerating}
+                    onClick={() => handleExport('download')}
+                  >
+                    {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                    Download PDF
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="w-full gap-2"
+                    size="lg"
+                    onClick={() => handleExport('print')}
+                  >
+                    <Printer className="h-4 w-4" />
+                    Print
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="w-full gap-2 text-xs"
+                    size="sm"
+                    onClick={() => {
+                      setExportOrientation('portrait');
+                      setExportSheetsPerPage(1);
+                      setExportShowBreaks(true);
+                      setExportShowEmpty(true);
+                      setExportHeaderContent('');
+                      setExportFooterContent('');
+                      setExportSelectedClasses([]);
+                      setExportSelectedTeachers([]);
+                      setExportSelectedDays([]);
+                      setExportDetailMode('show-periods');
+                      setExportDaywiseDays([]);
+                      setExportDaywiseClasses([]);
+                      toast({ title: 'Settings reset', description: 'Export settings have been reset to defaults.' });
+                    }}
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                    Reset Defaults
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
         </TabsContent>
       </Tabs>
     </div>
-  );
-}
-
-/* ====================================================================
-   DownloadAllButton — Shared button for combined download
-   ==================================================================== */
-
-function DownloadAllButton({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <Button onClick={onClick} className="gap-1.5">
-      <Download className="h-4 w-4" />
-      {label}
-    </Button>
   );
 }
 
@@ -537,302 +966,190 @@ function usePdfDownload() {
 }
 
 /* ====================================================================
-   Print Settings Dialog
+   Extracted Teacher Period Count helpers (shared by Period Count tab
+   and PDF Export tab)
    ==================================================================== */
 
-function PrintSettingsDialog({
-  settings,
-  onUpdate,
-  onReset,
-  children,
-}: {
-  settings: PrintSettings;
-  onUpdate: (partial: Partial<PrintSettings>) => void;
-  onReset: () => void;
-  children: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(false);
-  const isDefault =
-    settings.orientation === DEFAULT_PRINT_SETTINGS.orientation &&
-    settings.sheetsPerPage === DEFAULT_PRINT_SETTINGS.sheetsPerPage &&
-    settings.headerContent === DEFAULT_PRINT_SETTINGS.headerContent &&
-    settings.footerContent === DEFAULT_PRINT_SETTINGS.footerContent;
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>{children}</DialogTrigger>
-      <DialogContent className="sm:max-w-[460px]">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Settings2 className="h-4 w-4" />
-            Print Settings
-          </DialogTitle>
-          <DialogDescription>
-            Customize how reports are printed and downloaded. Settings persist for this session only.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-5 py-2">
-          <div className="space-y-2">
-            <Label>Page Orientation</Label>
-            <Select
-              value={settings.orientation}
-              onValueChange={(v) => onUpdate({ orientation: v as 'portrait' | 'landscape' })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="portrait">Portrait (default)</SelectItem>
-                <SelectItem value="landscape">Landscape</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-[10px] text-muted-foreground">
-              {settings.orientation === 'portrait' ? 'Vertical A4 layout — ideal for timetables' : 'Horizontal A4 layout — ideal for wide tables'}
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Sheets per Page</Label>
-            <Select
-              value={String(settings.sheetsPerPage)}
-              onValueChange={(v) => onUpdate({ sheetsPerPage: Number(v) })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="1">1 sheet per page</SelectItem>
-                <SelectItem value="2">2 sheets per page</SelectItem>
-                <SelectItem value="3">3 sheets per page</SelectItem>
-                <SelectItem value="4">4 sheets per page</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-[10px] text-muted-foreground">
-              Multiple sheets stack vertically on one page with even spacing
-            </p>
-          </div>
-
-          <Separator />
-
-          <div className="space-y-2">
-            <Label>Custom Header</Label>
-            <Textarea
-              placeholder="Optional text to appear in the report header (e.g. school motto, academic year)"
-              value={settings.headerContent}
-              onChange={(e) => onUpdate({ headerContent: e.target.value })}
-              rows={2}
-              className="text-sm"
-            />
-            <p className="text-[10px] text-muted-foreground">
-              Leave blank to use the default header
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Custom Footer</Label>
-            <Textarea
-              placeholder="Optional text to appear in the report footer (e.g. principal signature, contact info)"
-              value={settings.footerContent}
-              onChange={(e) => onUpdate({ footerContent: e.target.value })}
-              rows={2}
-              className="text-sm"
-            />
-            <p className="text-[10px] text-muted-foreground">
-              Leave blank to use the default footer (date + page number)
-            </p>
-          </div>
-        </div>
-
-        <DialogFooter className="flex justify-between">
-          <Button variant="ghost" size="sm" onClick={onReset} disabled={isDefault}>
-            <RotateCcw className="h-3.5 w-3.5 mr-1" />
-            Reset Defaults
-          </Button>
-          <Button size="sm" onClick={() => setOpen(false)}>
-            Done
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
+function countNonBreakPeriods(timings: any): number {
+  let count = 0;
+  for (let p = 1; p <= timings.periodsPerDay; p++) {
+    if (!isBreakPeriod(p, timings)) count++;
+  }
+  return count;
 }
 
-/* ===== Teacher Period Count Report ===== */
+interface TeacherPeriodDataItem {
+  teacher: { id: string; name: string; shortName: string };
+  dayCounts: Record<string, number>;
+  dayPeriods: Record<string, { period: number; subject: string; cls: string; sec: string }[]>;
+  totalForSelectedDays: number;
+}
 
-type DetailMode = 'count-only' | 'show-periods' | 'show-total';
-type OrientationMode = 'portrait' | 'landscape';
+function computeTeacherPeriodData(
+  teachers: any[],
+  entries: any[],
+  activeDays: string[],
+  filteredSelectedDays: string[],
+  timings: any,
+  subjects: any[],
+  classes: any[],
+  sections: any[]
+): TeacherPeriodDataItem[] {
+  return teachers.map((teacher) => {
+    const teacherEntries = entries.filter((e: any) => e.teacherId === teacher.id);
+    const dayCounts: Record<string, number> = {};
+    const dayPeriods: Record<string, { period: number; subject: string; cls: string; sec: string }[]> = {};
 
-function TeacherPeriodCountReport() {
-  const { entries, teachers, timings, schoolName, classes, sections, subjects } = useTimetableStore();
-  const { toast } = useToast();
-  const { downloadPdf, isGenerating } = usePdfDownload();
-  const reportRef = useRef<HTMLDivElement>(null);
-  const { settings: printSettings, updateSettings, resetSettings } = usePrintSettings();
-
-  const activeDays = timings.days;
-  const [selectedDays, setSelectedDays] = useState<string[]>([...activeDays]);
-  const [detailMode, setDetailMode] = useState<DetailMode>('show-periods');
-  const [orientation, setOrientation] = useState<OrientationMode>('landscape');
-  const [tablesPerPage, setTablesPerPage] = useState<number>(1);
-
-  const toggleDay = (day: string) => {
-    setSelectedDays((prev) => prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]);
-  };
-
-  const teacherData = useMemo(() => {
-    return teachers.map((teacher) => {
-      const teacherEntries = entries.filter((e) => e.teacherId === teacher.id);
-      const dayCounts: Record<string, number> = {};
-      const dayPeriods: Record<string, { period: number; subject: string; cls: string; sec: string }[]> = {};
-
-      for (const day of activeDays) {
-        const dayEntries = teacherEntries.filter((e) => e.day === day && !isBreakPeriod(e.period, timings));
-        dayCounts[day] = dayEntries.length;
-        dayPeriods[day] = dayEntries.map((e) => {
-          const subj = subjects.find((s) => s.id === e.subjectId);
-          const cls = classes.find((c) => c.id === e.classId);
-          const sec = sections.find((s) => s.id === e.sectionId);
-          return {
-            period: e.period,
-            subject: subj?.shortName || '?',
-            cls: cls?.name || '?',
-            sec: sec?.name || '?',
-          };
-        });
-      }
-
-      const totalForSelectedDays = selectedDays.reduce((sum, d) => sum + (dayCounts[d] || 0), 0);
-
-      return { teacher, dayCounts, dayPeriods, totalForSelectedDays };
-    });
-  }, [teachers, entries, activeDays, timings, selectedDays, subjects, classes, sections]);
-
-  const filteredSelectedDays = activeDays.filter((d) => selectedDays.includes(d));
-
-  const nonBreakPeriodsCount = useMemo(() => {
-    let count = 0;
-    for (let p = 1; p <= timings.periodsPerDay; p++) {
-      if (!isBreakPeriod(p, timings)) count++;
+    for (const day of activeDays) {
+      const dayEntries = teacherEntries.filter((e: any) => e.day === day && !isBreakPeriod(e.period, timings));
+      dayCounts[day] = dayEntries.length;
+      dayPeriods[day] = dayEntries.map((e: any) => {
+        const subj = subjects.find((s: any) => s.id === e.subjectId);
+        const cls = classes.find((c: any) => c.id === e.classId);
+        const sec = sections.find((s: any) => s.id === e.sectionId);
+        return {
+          period: e.period,
+          subject: subj?.shortName || '?',
+          cls: cls?.name || '?',
+          sec: sec?.name || '?',
+        };
+      });
     }
-    return count;
-  }, [timings]);
 
-  const maxPossiblePerTeacher = filteredSelectedDays.length * nonBreakPeriodsCount;
+    const totalForSelectedDays = filteredSelectedDays.reduce((sum: number, d: string) => sum + (dayCounts[d] || 0), 0);
 
-  const effectiveOrientation = (printSettings.orientation !== DEFAULT_PRINT_SETTINGS.orientation)
-    ? printSettings.orientation
-    : orientation;
+    return { teacher, dayCounts, dayPeriods, totalForSelectedDays };
+  });
+}
 
-  const buildReportHtml = useCallback(() => {
-    const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-    const isLandscape = effectiveOrientation === 'landscape';
-    const s = printSettings;
+function buildPeriodCountReportHtml(params: {
+  schoolName: string;
+  teacherData: TeacherPeriodDataItem[];
+  filteredSelectedDays: string[];
+  activeDays: string[];
+  orientation: 'portrait' | 'landscape';
+  tablesPerPage: number;
+  detailMode: DetailMode;
+  nonBreakPeriodsCount: number;
+  maxPossiblePerTeacher: number;
+  teachersCount: number;
+  printSettings: PrintSettings;
+  timings: any;
+}): string {
+  const {
+    schoolName, teacherData, filteredSelectedDays, activeDays,
+    orientation, tablesPerPage, detailMode,
+    nonBreakPeriodsCount, maxPossiblePerTeacher, teachersCount,
+    printSettings: s, timings,
+  } = params;
 
-    const fontSize = tablesPerPage === 1 ? (isLandscape ? '8px' : '7px') : '6px';
-    const headerFontSize = tablesPerPage === 1 ? (isLandscape ? '7px' : '6.5px') : '5.5px';
-    const cellPad = tablesPerPage === 1 ? '2px 3px' : '1px 2px';
+  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const isLandscape = orientation === 'landscape';
 
-    const sorted = [...teacherData].sort((a, b) => b.totalForSelectedDays - a.totalForSelectedDays);
+  const fontSize = tablesPerPage === 1 ? (isLandscape ? '8px' : '7px') : '6px';
+  const headerFontSize = tablesPerPage === 1 ? (isLandscape ? '7px' : '6.5px') : '5.5px';
+  const cellPad = tablesPerPage === 1 ? '2px 3px' : '1px 2px';
 
-    let tablesHtml = '';
+  const sorted = [...teacherData].sort((a, b) => b.totalForSelectedDays - a.totalForSelectedDays);
 
-    if (tablesPerPage === 1) {
+  let tablesHtml = '';
+
+  if (tablesPerPage === 1) {
+    let tableRows = '';
+    sorted.forEach((td, idx) => {
+      const t = td.teacher;
+      const rowBg = idx % 2 === 0 ? 'background:#FFFFFF;' : 'background:#F8F9FA;';
+      tableRows += `<tr style="${rowBg}">
+        <td class="td-sno">${sorted.indexOf(td) + 1}</td>
+        <td class="td-name">${esc(t.name)}</td>
+        <td class="td-short">${esc(t.shortName)}</td>`;
+      for (const day of filteredSelectedDays) {
+        const cnt = td.dayCounts[day] || 0;
+        const bgClass = cnt === 0 ? 'zero' : cnt >= nonBreakPeriodsCount ? 'full' : '';
+        tableRows += `<td class="td-num ${bgClass}">${cnt}</td>`;
+      }
+      tableRows += `<td class="td-total"><strong>${td.totalForSelectedDays}</strong></td>`;
+      if (detailMode === 'show-periods') {
+        let detailParts: string[] = [];
+        for (const day of filteredSelectedDays) {
+          const periods = td.dayPeriods[day] || [];
+          if (periods.length > 0) {
+            const pList = periods.map((p) => getPeriodLabel(p.period, timings)).join(',');
+            detailParts.push(`${day.slice(0, 3)}:${pList}`);
+          }
+        }
+        tableRows += `<td class="td-detail">${detailParts.join(' | ')}</td>`;
+      }
+      tableRows += '</tr>';
+    });
+
+    tablesHtml = `
+      <table class="pc-table">
+        <thead>
+          <tr>
+            <th class="th-sno">#</th>
+            <th class="th-name">Teacher Name</th>
+            <th class="th-short">Code</th>`;
+    for (const day of filteredSelectedDays) {
+      tablesHtml += `<th class="th-day">${esc(day)}</th>`;
+    }
+    tablesHtml += `<th class="th-total">Total</th>`;
+    if (detailMode === 'show-periods') {
+      tablesHtml += '<th class="th-detail">Periods</th>';
+    }
+    tablesHtml += `</tr></thead><tbody>${tableRows}</tbody></table>`;
+  } else {
+    const chunkSize = Math.max(1, Math.ceil(sorted.length / tablesPerPage));
+    const chunks: typeof sorted[] = [];
+    for (let i = 0; i < sorted.length; i += chunkSize) {
+      chunks.push(sorted.slice(i, i + chunkSize));
+    }
+
+    chunks.forEach((chunk, ci) => {
       let tableRows = '';
-      sorted.forEach((td, idx) => {
+      chunk.forEach((td) => {
         const t = td.teacher;
-        const rowBg = idx % 2 === 0 ? 'background:#FFFFFF;' : 'background:#F8F9FA;';
-        tableRows += `<tr style="${rowBg}">
-          <td class="td-sno">${sorted.indexOf(td) + 1}</td>
-          <td class="td-name">${esc(t.name)}</td>
-          <td class="td-short">${esc(t.shortName)}</td>`;
+        tableRows += `<tr>
+          <td class="td-sno">${ci * chunkSize + chunk.indexOf(td) + 1}</td>
+          <td class="td-name">${esc(t.shortName)}</td>`;
         for (const day of filteredSelectedDays) {
           const cnt = td.dayCounts[day] || 0;
-          const bgClass = cnt === 0 ? 'zero' : cnt >= nonBreakPeriodsCount ? 'full' : '';
+          const bgClass = cnt === 0 ? 'zero' : '';
           tableRows += `<td class="td-num ${bgClass}">${cnt}</td>`;
         }
         tableRows += `<td class="td-total"><strong>${td.totalForSelectedDays}</strong></td>`;
-        if (detailMode === 'show-periods') {
-          let detailParts: string[] = [];
-          for (const day of filteredSelectedDays) {
-            const periods = td.dayPeriods[day] || [];
-            if (periods.length > 0) {
-              const pList = periods.map((p) => getPeriodLabel(p.period, timings)).join(',');
-              detailParts.push(`${day.slice(0, 3)}:${pList}`);
-            }
-          }
-          tableRows += `<td class="td-detail">${detailParts.join(' | ')}</td>`;
-        }
         tableRows += '</tr>';
       });
 
-      tablesHtml = `
-        <table class="pc-table">
-          <thead>
-            <tr>
+      tablesHtml += `
+        <div class="table-chunk sheet-slot" style="width:100%;display:block;">
+          <div class="chunk-title">Table ${ci + 1}</div>
+          <table class="pc-table">
+            <thead><tr>
               <th class="th-sno">#</th>
-              <th class="th-name">Teacher Name</th>
-              <th class="th-short">Code</th>`;
+              <th class="th-name">Teacher</th>`;
       for (const day of filteredSelectedDays) {
-        tablesHtml += `<th class="th-day">${esc(day)}</th>`;
+        tablesHtml += `<th class="th-day">${esc(day.slice(0, 3))}</th>`;
       }
-      tablesHtml += `<th class="th-total">Total</th>`;
-      if (detailMode === 'show-periods') {
-        tablesHtml += '<th class="th-detail">Periods</th>';
-      }
-      tablesHtml += `</tr></thead><tbody>${tableRows}</tbody></table>`;
-    } else {
-      const chunkSize = Math.max(1, Math.ceil(sorted.length / tablesPerPage));
-      const chunks: typeof sorted[] = [];
-      for (let i = 0; i < sorted.length; i += chunkSize) {
-        chunks.push(sorted.slice(i, i + chunkSize));
-      }
+      tablesHtml += `<th class="th-total">Total</th></tr></thead>
+            <tbody>${tableRows}</tbody>
+          </table>
+        </div>`;
+    });
+  }
 
-      chunks.forEach((chunk, ci) => {
-        let tableRows = '';
-        chunk.forEach((td) => {
-          const t = td.teacher;
-          tableRows += `<tr>
-            <td class="td-sno">${ci * chunkSize + chunk.indexOf(td) + 1}</td>
-            <td class="td-name">${esc(t.shortName)}</td>`;
-          for (const day of filteredSelectedDays) {
-            const cnt = td.dayCounts[day] || 0;
-            const bgClass = cnt === 0 ? 'zero' : '';
-            tableRows += `<td class="td-num ${bgClass}">${cnt}</td>`;
-          }
-          tableRows += `<td class="td-total"><strong>${td.totalForSelectedDays}</strong></td>`;
-          tableRows += '</tr>';
-        });
+  const daysLabel = filteredSelectedDays.length === activeDays.length
+    ? 'All Days'
+    : filteredSelectedDays.join(', ');
 
-        tablesHtml += `
-          <div class="table-chunk sheet-slot" style="width:100%;display:block;">
-            <div class="chunk-title">Table ${ci + 1}</div>
-            <table class="pc-table">
-              <thead><tr>
-                <th class="th-sno">#</th>
-                <th class="th-name">Teacher</th>`;
-        for (const day of filteredSelectedDays) {
-          tablesHtml += `<th class="th-day">${esc(day.slice(0, 3))}</th>`;
-        }
-        tablesHtml += `<th class="th-total">Total</th></tr></thead>
-              <tbody>${tableRows}</tbody>
-            </table>
-          </div>`;
-      });
-    }
+  const customHeaderHtml = s.headerContent
+    ? `<div class="custom-header">${esc(s.headerContent)}</div>`
+    : '';
+  const customFooterHtml = s.footerContent
+    ? `<div class="custom-footer">${esc(s.footerContent)}</div>`
+    : '';
 
-    const daysLabel = filteredSelectedDays.length === activeDays.length
-      ? 'All Days'
-      : filteredSelectedDays.join(', ');
-
-    const customHeaderHtml = s.headerContent
-      ? `<div class="custom-header">${esc(s.headerContent)}</div>`
-      : '';
-    const customFooterHtml = s.footerContent
-      ? `<div class="custom-footer">${esc(s.footerContent)}</div>`
-      : '';
-
-    return `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
@@ -892,14 +1209,14 @@ function TeacherPeriodCountReport() {
   <div class="report-header">
     <div class="school-name">${esc(schoolName)}</div>
     <div class="report-title">Teacher Period Count Report</div>
-    <div class="report-subtitle">${esc(daysLabel)} | Max ${maxPossiblePerTeacher} periods/teacher | ${teachers.length} teachers</div>
+    <div class="report-subtitle">${esc(daysLabel)} | Max ${maxPossiblePerTeacher} periods/teacher | ${teachersCount} teachers</div>
     ${customHeaderHtml}
   </div>
 
   ${tablesHtml}
 
   <div class="summary-bar">
-    <div class="summary-item"><span class="summary-num">${teachers.length}</span><span class="summary-label">Teachers</span></div>
+    <div class="summary-item"><span class="summary-num">${teachersCount}</span><span class="summary-label">Teachers</span></div>
     <div class="summary-item"><span class="summary-num">${filteredSelectedDays.length}</span><span class="summary-label">Days</span></div>
     <div class="summary-item"><span class="summary-num">${maxPossiblePerTeacher}</span><span class="summary-label">Max Periods</span></div>
     <div class="summary-item"><span class="summary-num">${sorted.reduce((sum, t) => sum + t.totalForSelectedDays, 0)}</span><span class="summary-label">Total Assigned</span></div>
@@ -913,18 +1230,32 @@ function TeacherPeriodCountReport() {
   </div>
 </body>
 </html>`;
-  }, [teacherData, filteredSelectedDays, activeDays, orientation, tablesPerPage, detailMode, schoolName, nonBreakPeriodsCount, maxPossiblePerTeacher, teachers.length, effectiveOrientation, printSettings, timings]);
+}
 
-  const handlePrint = () => {
-    const html = buildReportHtml();
-    printViaIframe(html, 'Teacher_Period_Count');
-    toast({ title: 'Print dialog opened', description: 'Use the print dialog to print or save as PDF.' });
+/* ====================================================================
+   TeacherPeriodCountReport — View-only (no print/pdf buttons)
+   ==================================================================== */
+
+function TeacherPeriodCountReport() {
+  const { entries, teachers, timings, classes, sections, subjects } = useTimetableStore();
+  const reportRef = useRef<HTMLDivElement>(null);
+
+  const activeDays = timings.days;
+  const [selectedDays, setSelectedDays] = useState<string[]>([...activeDays]);
+  const [detailMode, setDetailMode] = useState<DetailMode>('show-periods');
+
+  const toggleDay = (day: string) => {
+    setSelectedDays((prev) => prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]);
   };
 
-  const handlePdf = async () => {
-    const html = buildReportHtml();
-    await downloadPdf(html, `Period_Count_${new Date().toISOString().slice(0, 10)}.pdf`, effectiveOrientation);
-  };
+  const filteredSelectedDays = activeDays.filter((d) => selectedDays.includes(d));
+
+  const teacherData = useMemo(() => {
+    return computeTeacherPeriodData(teachers, entries, activeDays, filteredSelectedDays, timings, subjects, classes, sections);
+  }, [teachers, entries, activeDays, filteredSelectedDays, timings, subjects, classes, sections]);
+
+  const nonBreakPeriodsCount = useMemo(() => countNonBreakPeriods(timings), [timings]);
+  const maxPossiblePerTeacher = filteredSelectedDays.length * nonBreakPeriodsCount;
 
   return (
     <div className="space-y-4">
@@ -934,7 +1265,7 @@ function TeacherPeriodCountReport() {
             <BarChart3 className="h-5 w-5" />
             Teacher Period Count
           </CardTitle>
-          <CardDescription>Calculate and customize teacher workload report</CardDescription>
+          <CardDescription>Calculate teacher workload distribution</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
@@ -991,54 +1322,6 @@ function TeacherPeriodCountReport() {
               ))}
             </div>
           </div>
-
-          <Separator />
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Orientation</Label>
-              <Select value={orientation} onValueChange={(v) => setOrientation(v as OrientationMode)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="portrait">Portrait (A4)</SelectItem>
-                  <SelectItem value="landscape">Landscape (A4)</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-[10px] text-muted-foreground">
-                Landscape fits {orientation === 'landscape' ? '~20' : '~14'} teachers per page
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Tables Per Page</Label>
-              <Select value={String(tablesPerPage)} onValueChange={(v) => setTablesPerPage(Number(v))}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1">1 Full Table</SelectItem>
-                  <SelectItem value="2">2 Tables Side-by-Side</SelectItem>
-                  <SelectItem value="3">3 Tables Side-by-Side</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-[10px] text-muted-foreground">
-                More tables = smaller font, fits more data
-              </p>
-            </div>
-          </div>
-
-          <div className="flex gap-2 flex-wrap">
-            <Button variant="outline" onClick={handlePrint}>
-              <Printer className="h-4 w-4 mr-1.5" />
-              Print Report
-            </Button>
-            <Button onClick={handlePdf} disabled={isGenerating}>
-              {isGenerating ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Download className="h-4 w-4 mr-1.5" />}
-              Download PDF ({effectiveOrientation === 'landscape' ? 'Landscape' : 'Portrait'})
-            </Button>
-          </div>
         </CardContent>
       </Card>
 
@@ -1049,11 +1332,11 @@ function TeacherPeriodCountReport() {
               <div>
                 <CardTitle className="text-lg">Preview</CardTitle>
                 <CardDescription>
-                  {filteredSelectedDays.length} day{filteredSelectedDays.length !== 1 ? 's' : ''} selected | {teachers.length} teachers | {effectiveOrientation} mode
+                  {filteredSelectedDays.length} day{filteredSelectedDays.length !== 1 ? 's' : ''} selected | {teachers.length} teachers
                 </CardDescription>
               </div>
               <Badge variant="secondary">
-                {effectiveOrientation === 'landscape' ? (tablesPerPage === 1 ? '~20' : `~${20 * tablesPerPage}`) : (tablesPerPage === 1 ? '~14' : `~${14 * tablesPerPage}`)} teachers/page
+                {teachers.length} teachers
               </Badge>
             </div>
           </CardHeader>
@@ -1158,38 +1441,16 @@ function TeacherPeriodCountReport() {
   );
 }
 
-/* ===== Class Timetable Report ===== */
+/* ====================================================================
+   Class Timetable Report — View-only (no print/pdf buttons)
+   ==================================================================== */
 
 function ClassTimetableReport({ classId, sectionId, showBreaks, showEmpty }: { classId: string; sectionId: string; showBreaks: boolean; showEmpty: boolean }) {
-  const { entries, teachers, subjects, timings, schoolName, classes, sections } = useTimetableStore();
-  const { toast } = useToast();
-  const { downloadPdf, isGenerating } = usePdfDownload();
-  const { settings: printSettings, updateSettings, resetSettings } = usePrintSettings();
+  const { entries, teachers, subjects, timings, classes, sections } = useTimetableStore();
 
   const activeDays = timings.days;
   const cls = classes.find((c) => c.id === classId);
   const sec = sections.find((s) => s.id === sectionId);
-
-  const handlePrint = () => {
-    const html = buildClassTimetableHtml(
-      schoolName, cls?.name || 'Class', sec?.name || '',
-      timings, entries, teachers, classes, sections, subjects,
-      classId, sectionId, showBreaks, showEmpty,
-      printSettings
-    );
-    printViaIframe(html, `${cls?.name || 'Class'}_${sec?.name || ''}_Timetable`);
-    toast({ title: 'Print dialog opened', description: 'Use the print dialog to print or save as PDF.' });
-  };
-
-  const handlePdf = async () => {
-    const html = buildClassTimetableHtml(
-      schoolName, cls?.name || 'Class', sec?.name || '',
-      timings, entries, teachers, classes, sections, subjects,
-      classId, sectionId, showBreaks, showEmpty,
-      printSettings
-    );
-    await downloadPdf(html, `${cls?.name || 'Class'}_${sec?.name || ''}_Timetable.pdf`, printSettings.orientation);
-  };
 
   const visiblePeriods = useMemo(() => {
     const periods: number[] = [];
@@ -1210,21 +1471,9 @@ function ClassTimetableReport({ classId, sectionId, showBreaks, showEmpty }: { c
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <div>
-            <CardTitle className="text-lg">{cls?.name} — {sec?.name}</CardTitle>
-            <CardDescription>Weekly timetable report</CardDescription>
-          </div>
-          <div className="flex gap-2 flex-wrap">
-            <Button variant="outline" size="sm" onClick={handlePrint}>
-              <Printer className="h-4 w-4 mr-1.5" />
-              Print
-            </Button>
-            <Button size="sm" onClick={handlePdf} disabled={isGenerating}>
-              {isGenerating ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Download className="h-4 w-4 mr-1.5" />}
-              Download PDF
-            </Button>
-          </div>
+        <div>
+          <CardTitle className="text-lg">{cls?.name} — {sec?.name}</CardTitle>
+          <CardDescription>Weekly timetable report</CardDescription>
         </div>
       </CardHeader>
       <CardContent>
@@ -1284,35 +1533,17 @@ function ClassTimetableReport({ classId, sectionId, showBreaks, showEmpty }: { c
   );
 }
 
-/* ===== Teacher Schedule Report ===== */
+/* ====================================================================
+   Teacher Schedule Report — View-only (no print/pdf buttons)
+   ==================================================================== */
 
 function TeacherScheduleReport({ teacherId, showBreaks, showEmpty }: { teacherId: string; showBreaks: boolean; showEmpty: boolean }) {
-  const { entries, classes, sections, subjects, timings, schoolName, teachers } = useTimetableStore();
-  const { toast } = useToast();
-  const { downloadPdf, isGenerating } = usePdfDownload();
-  const { settings: printSettings, updateSettings, resetSettings } = usePrintSettings();
+  const { entries, classes, sections, subjects, timings, teachers } = useTimetableStore();
 
   const activeDays = timings.days;
   const teacher = teachers.find((t) => t.id === teacherId);
 
   const teacherEntries = useMemo(() => entries.filter((e) => e.teacherId === teacherId), [entries, teacherId]);
-
-  const handlePrint = () => {
-    const html = buildTeacherScheduleHtml(
-      schoolName, teacher?.name || 'Teacher', timings, entries, teachers, classes, sections, subjects,
-      teacherId, showBreaks, showEmpty, printSettings
-    );
-    printViaIframe(html, `${teacher?.shortName || 'Teacher'}_Schedule`);
-    toast({ title: 'Print dialog opened', description: 'Use the print dialog to print or save as PDF.' });
-  };
-
-  const handlePdf = async () => {
-    const html = buildTeacherScheduleHtml(
-      schoolName, teacher?.name || 'Teacher', timings, entries, teachers, classes, sections, subjects,
-      teacherId, showBreaks, showEmpty, printSettings
-    );
-    await downloadPdf(html, `${teacher?.shortName || 'Teacher'}_Schedule.pdf`, printSettings.orientation);
-  };
 
   const visiblePeriods = useMemo(() => {
     const periods: number[] = [];
@@ -1331,18 +1562,9 @@ function TeacherScheduleReport({ teacherId, showBreaks, showEmpty }: { teacherId
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <div>
-            <CardTitle className="text-lg flex items-center gap-2"><UserCheck className="h-4 w-4" />{teacher?.name}</CardTitle>
-            <CardDescription>Weekly teaching schedule</CardDescription>
-          </div>
-          <div className="flex gap-2 flex-wrap">
-            <Button variant="outline" size="sm" onClick={handlePrint}><Printer className="h-4 w-4 mr-1.5" />Print</Button>
-            <Button size="sm" onClick={handlePdf} disabled={isGenerating}>
-              {isGenerating ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Download className="h-4 w-4 mr-1.5" />}
-              Download PDF
-            </Button>
-          </div>
+        <div>
+          <CardTitle className="text-lg flex items-center gap-2"><UserCheck className="h-4 w-4" />{teacher?.name}</CardTitle>
+          <CardDescription>Weekly teaching schedule</CardDescription>
         </div>
       </CardHeader>
       <CardContent>
@@ -1401,7 +1623,9 @@ function TeacherScheduleReport({ teacherId, showBreaks, showEmpty }: { teacherId
   );
 }
 
-/* ===== Daywise Schedule Report ===== */
+/* ====================================================================
+   Daywise Schedule Report — View-only (no print/pdf buttons)
+   ==================================================================== */
 
 function DaywiseScheduleReport({
   selectedDays,
@@ -1416,10 +1640,7 @@ function DaywiseScheduleReport({
   showBreaks: boolean;
   showEmpty: boolean;
 }) {
-  const { entries, teachers, subjects, timings, schoolName, classes, sections } = useTimetableStore();
-  const { toast } = useToast();
-  const { downloadPdf, isGenerating } = usePdfDownload();
-  const { settings: printSettings, updateSettings, resetSettings } = usePrintSettings();
+  const { entries, teachers, subjects, timings } = useTimetableStore();
 
   const activeDays = timings.days;
   const filteredSelectedDays = activeDays.filter((d) => selectedDays.includes(d));
@@ -1428,25 +1649,6 @@ function DaywiseScheduleReport({
     if (selectedClassSectionKeys.length === 0) return classSectionOpts;
     return classSectionOpts.filter((o) => selectedClassSectionKeys.includes(o.value));
   }, [selectedClassSectionKeys, classSectionOpts]);
-
-  const handlePrint = () => {
-    const html = buildDaywiseScheduleHtml(
-      schoolName, filteredSelectedDays, visibleCombos,
-      timings, entries, teachers, classes, sections, subjects,
-      showBreaks, showEmpty, printSettings
-    );
-    printViaIframe(html, 'Daywise_Schedule');
-    toast({ title: 'Print dialog opened', description: 'Use the print dialog to print or save as PDF.' });
-  };
-
-  const handlePdf = async () => {
-    const html = buildDaywiseScheduleHtml(
-      schoolName, filteredSelectedDays, visibleCombos,
-      timings, entries, teachers, classes, sections, subjects,
-      showBreaks, showEmpty, printSettings
-    );
-    await downloadPdf(html, `Daywise_Schedule_${new Date().toISOString().slice(0, 10)}.pdf`, printSettings.orientation);
-  };
 
   const visiblePeriods = useMemo(() => {
     const periods: number[] = [];
@@ -1468,17 +1670,6 @@ function DaywiseScheduleReport({
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-2 flex-wrap">
-        <Button variant="outline" size="sm" onClick={handlePrint}>
-          <Printer className="h-4 w-4 mr-1.5" />
-          Print
-        </Button>
-        <Button size="sm" onClick={handlePdf} disabled={isGenerating}>
-          {isGenerating ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Download className="h-4 w-4 mr-1.5" />}
-          Download PDF
-        </Button>
-      </div>
-
       {filteredSelectedDays.map((day) => (
         <Card key={day}>
           <CardHeader className="pb-3">
@@ -1705,9 +1896,6 @@ function buildCombinedClassTimetableHtml(
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   const reportTitle = 'Class Timetable Report';
 
-  // No cover page
-
-  // Build each timetable
   let timetablesHtml = '';
   for (const combo of combos) {
     const cls = classes.find((c) => c.id === combo.classId);
@@ -1794,8 +1982,6 @@ function buildCombinedTeacherScheduleHtml(
   const activeDays = timings.days;
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   const reportTitle = 'Teacher Schedule Report';
-
-  // No cover page
 
   let timetablesHtml = '';
   for (const tchr of teacherList) {
