@@ -5,12 +5,25 @@ import { persist, createJSONStorage } from 'zustand/middleware';
    Types
    ======================================================================== */
 
+/**
+ * Represents a single period's slot, whether it's a lesson or a break.
+ */
+export interface PeriodTiming {
+  startTime: string;
+  endTime: string;
+  isBreak: boolean;
+  label?: string;
+}
+
+/**
+ * Updated Timings interface to match setup-tab.tsx and timetable-tab.tsx
+ */
 export interface Timings {
-  periods: number;
-  assemblyTime: string;
-  breakTime: string;
-  breakAfterPeriod: number;
-  periodTimes: string[];
+  periodsPerDay: number;
+  startTime: string;
+  periodDuration: number;
+  periodTimingMode: 'automatic' | 'custom';
+  customPeriodTimings: PeriodTiming[];
 }
 
 export interface Teacher {
@@ -147,12 +160,6 @@ export type TimetableStore = TimetableState & TimetableActions;
    Helpers
    ======================================================================== */
 
-/**
- * Derives a short name from a full name.
- *
- * - Single word  → first 3 characters, upper‑cased.
- * - Multiple words → first character of each word (max 3), upper‑cased.
- */
 function deriveShortName(name: string): string {
   const trimmed = name.trim();
   if (!trimmed) return '';
@@ -163,10 +170,6 @@ function deriveShortName(name: string): string {
   return words.map((w) => w[0]).join('').substring(0, 3).toUpperCase();
 }
 
-/**
- * Recomputes `sectionIds` for every class based on the current sections list.
- * Returns a *new* array of classes (new references for React re‑rendering).
- */
 function recomputeClassSectionIds(
   classes: Class[],
   sections: Section[]
@@ -179,14 +182,6 @@ function recomputeClassSectionIds(
   }));
 }
 
-/**
- * Parses a class display name of the form "ClassName (SectionName)"
- * into its constituent parts.
- *
- * Examples:
- *   "Class 10 (A)"       → { className: "Class 10", sectionName: "A" }
- *   "Class 10 (Section A)" → { className: "Class 10", sectionName: "Section A" }
- */
 function parseClassDisplayName(
   displayName: string
 ): { className: string; sectionName: string } | null {
@@ -197,16 +192,10 @@ function parseClassDisplayName(
   return null;
 }
 
-/**
- * Creates a unique ID. Uses `crypto.randomUUID()` when available (modern
- * browsers & Node 19+), with a Math.random fallback for extremely old
- * environments.
- */
 function generateId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
   }
-  // Fallback – extremely unlikely to be hit in practice
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
     const r = (Math.random() * 16) | 0;
     const v = c === 'x' ? r : (r & 0x3) | 0x8;
@@ -219,19 +208,11 @@ function generateId(): string {
    ======================================================================== */
 
 const DEFAULT_TIMINGS: Timings = {
-  periods: 7,
-  assemblyTime: '07:30 AM - 08:00 AM',
-  breakTime: '10:00 AM - 10:20 AM',
-  breakAfterPeriod: 4,
-  periodTimes: [
-    '08:00 AM - 08:40 AM',
-    '08:40 AM - 09:20 AM',
-    '09:20 AM - 10:00 AM',
-    '10:00 AM - 10:40 AM',
-    '10:40 AM - 11:20 AM',
-    '11:20 AM - 12:00 PM',
-    '12:00 PM - 12:40 PM',
-  ],
+  periodsPerDay: 7,
+  startTime: '08:00',
+  periodDuration: 40,
+  periodTimingMode: 'automatic',
+  customPeriodTimings: [],
 };
 
 const DEFAULT_STATE: TimetableState = {
@@ -249,10 +230,6 @@ const DEFAULT_STATE: TimetableState = {
   substitutes: [],
 };
 
-/* ========================================================================
-   Array keys that must always be fully replaced (never shallow‑merged)
-   ======================================================================== */
-
 const ARRAY_KEYS: (keyof TimetableState)[] = [
   'teachers',
   'subjects',
@@ -267,15 +244,6 @@ const ARRAY_KEYS: (keyof TimetableState)[] = [
    Custom merge for persist middleware
    ======================================================================== */
 
-/**
- * Full‑replacement merge for the persist middleware.
- *
- * The default shallow merge (`{...current, ...persisted}`) already replaces
- * top‑level keys when using spread, but being explicit guarantees that every
- * array is a **new reference** so React / Zustand subscribers always detect
- * the change – even in edge‑cases where the persisted data was produced by
- * `JSON.stringify` → `JSON.parse` round‑tripping.
- */
 function fullReplacementMerge(
   persisted: unknown,
   current: TimetableState
@@ -285,17 +253,14 @@ function fullReplacementMerge(
 
   const next: TimetableState = { ...current };
 
-  // Scalar / object properties – override when present in persisted state
   if (p.schoolName !== undefined) next.schoolName = p.schoolName;
   if (p.organizationName !== undefined) next.organizationName = p.organizationName;
   if (p.academicYear !== undefined) next.academicYear = p.academicYear;
   if (p.headmasterName !== undefined) next.headmasterName = p.headmasterName;
   if (p.timings !== undefined) next.timings = p.timings;
 
-  // Arrays – ALWAYS create a fresh reference (spread into new array)
   for (const key of ARRAY_KEYS) {
     if (p[key] !== undefined) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (next as any)[key] = [...(p[key] as unknown[])];
     }
   }
@@ -310,12 +275,7 @@ function fullReplacementMerge(
 export const useTimetableStore = create<TimetableStore>()(
   persist(
     (set, get) => ({
-      /* ── Default state ── */
       ...DEFAULT_STATE,
-
-      /* ──────────────────────────────────────────────────────────────────
-         School info
-         ────────────────────────────────────────────────────────────────── */
 
       setSchoolInfo: (info) => {
         set({ ...info });
@@ -326,10 +286,6 @@ export const useTimetableStore = create<TimetableStore>()(
           timings: { ...state.timings, ...timings },
         }));
       },
-
-      /* ──────────────────────────────────────────────────────────────────
-         Teachers
-         ────────────────────────────────────────────────────────────────── */
 
       addTeacher: (name) => {
         const trimmed = name.trim();
@@ -368,10 +324,6 @@ export const useTimetableStore = create<TimetableStore>()(
         }));
       },
 
-      /* ──────────────────────────────────────────────────────────────────
-         Subjects
-         ────────────────────────────────────────────────────────────────── */
-
       addSubject: (name) => {
         const trimmed = name.trim();
         if (!trimmed) return;
@@ -404,10 +356,6 @@ export const useTimetableStore = create<TimetableStore>()(
         }));
       },
 
-      /* ──────────────────────────────────────────────────────────────────
-         Classes
-         ────────────────────────────────────────────────────────────────── */
-
       addClass: (name) => {
         const trimmed = name.trim();
         if (!trimmed) return;
@@ -435,7 +383,6 @@ export const useTimetableStore = create<TimetableStore>()(
             (s) => s.classId !== id
           );
           return {
-            // Recompute sectionIds for remaining classes
             classes: state.classes
               .filter((c) => c.id !== id)
               .map((c) => ({
@@ -451,10 +398,6 @@ export const useTimetableStore = create<TimetableStore>()(
           };
         });
       },
-
-      /* ──────────────────────────────────────────────────────────────────
-         Sections
-         ────────────────────────────────────────────────────────────────── */
 
       addSection: (name, classId) => {
         const trimmed = name.trim();
@@ -506,10 +449,6 @@ export const useTimetableStore = create<TimetableStore>()(
         });
       },
 
-      /* ──────────────────────────────────────────────────────────────────
-         Assignments
-         ────────────────────────────────────────────────────────────────── */
-
       addAssignment: (teacherId, subjectId, classId, sectionId) => {
         const assignment: Assignment = {
           id: generateId(),
@@ -528,10 +467,6 @@ export const useTimetableStore = create<TimetableStore>()(
           assignments: state.assignments.filter((a) => a.id !== id),
         }));
       },
-
-      /* ──────────────────────────────────────────────────────────────────
-         Entries
-         ────────────────────────────────────────────────────────────────── */
 
       addEntry: (day, period, teacherId, classId, sectionId, subjectId) => {
         const entry: Entry = {
@@ -553,10 +488,6 @@ export const useTimetableStore = create<TimetableStore>()(
         }));
       },
 
-      /* ──────────────────────────────────────────────────────────────────
-         Substitutes
-         ────────────────────────────────────────────────────────────────── */
-
       addSubstitute: (
         date,
         day,
@@ -564,7 +495,6 @@ export const useTimetableStore = create<TimetableStore>()(
         originalTeacherId,
         substituteTeacherId
       ) => {
-        // Look up the original entry to inherit class/section/subject info
         const state = get();
         const originalEntry = state.entries.find((e) => e.id === entryId);
         if (!originalEntry) return;
@@ -590,33 +520,11 @@ export const useTimetableStore = create<TimetableStore>()(
         }));
       },
 
-      /* ──────────────────────────────────────────────────────────────────
-         Backup Import / Export
-         ────────────────────────────────────────────────────────────────── */
-
-      /**
-       * Imports a full state snapshot.
-       *
-       * Supports two formats:
-       *
-       * 1. **ID‑based** – entries have `teacherId`, `classId`, `sectionId`,
-       *    `subjectId` fields (native store format).
-       *
-       * 2. **Human‑readable** – entries have `teacher`, `class`, `subject`
-       *    name strings instead of IDs. The class field is formatted as
-       *    `"ClassName (SectionName)"`. Substitutes similarly use
-       *    `originalTeacher` / `substituteTeacher` name strings.
-       *
-       * The function auto‑detects the format and resolves names to IDs
-       * using the teacher / subject / class / section data in the backup.
-       */
       importBackup: (data: unknown) => {
         if (!data || typeof data !== 'object') return;
 
         const d = data as Record<string, unknown>;
 
-        // ── Unwrap nested data wrappers ──
-        // Some backups wrap data under .data, .state, or .school
         const raw =
           d.teachers || d.schoolName || d.timings
             ? d
@@ -626,18 +534,12 @@ export const useTimetableStore = create<TimetableStore>()(
 
         const current = get();
 
-        // ── Normalise reference data ──
-        // The export format uses STRING arrays for teachers, subjects, classes.
-        // We must handle both string arrays AND object arrays.
-
         const teachers: Teacher[] = Array.isArray(raw.teachers)
           ? (raw.teachers as unknown[]).map((t) => {
-              // Handle string format: "John Smith"
               if (typeof t === 'string') {
                 const name = t.trim();
                 return { id: generateId(), name, shortName: deriveShortName(name) };
               }
-              // Handle object format: { id, name, shortName }
               const obj = t as Record<string, unknown>;
               const name = String(obj.name || '');
               return {
@@ -664,7 +566,6 @@ export const useTimetableStore = create<TimetableStore>()(
             })
           : current.subjects;
 
-        // Classes: exported as string array ["Class 10", "Class 11"]
         const classes: Class[] = Array.isArray(raw.classes)
           ? (raw.classes as unknown[]).map((c) => {
               if (typeof c === 'string') {
@@ -679,20 +580,14 @@ export const useTimetableStore = create<TimetableStore>()(
             })
           : current.classes;
 
-        // Sections: exported as [{name: "A", class: "Class 10"}]
-        // Note: the export uses "class" (name string) not "classId" (UUID)
-        // Some exports (native ID-based) only have {id, name} — no classId or class field.
-        // In that case, resolve classId by looking up which class.sectionIds contains this section's id.
         const sections: Section[] = Array.isArray(raw.sections)
           ? (raw.sections as unknown[]).map((s) => {
               const obj = s as Record<string, unknown>;
               const sectionName = String(obj.name || '');
               const sectionId = String(obj.id || generateId());
 
-              // Priority 1: explicit classId field
               let classId = String(obj.classId || '');
 
-              // Priority 2: resolve from "class" name string
               if (!classId && obj.class) {
                 const className = String(obj.class).trim();
                 const match = classes.find(
@@ -701,7 +596,6 @@ export const useTimetableStore = create<TimetableStore>()(
                 classId = match?.id || '';
               }
 
-              // Priority 3: reverse-lookup via class.sectionIds (native backup format)
               if (!classId && Array.isArray(raw.classes)) {
                 const ownerClass = (raw.classes as Record<string, unknown>[]).find(
                   (c) =>
@@ -709,7 +603,6 @@ export const useTimetableStore = create<TimetableStore>()(
                     (c.sectionIds as string[]).includes(sectionId)
                 );
                 if (ownerClass) {
-                  // Find the matching constructed class object by name
                   const matched = classes.find(
                     (c) => c.name === String(ownerClass.name || '')
                   );
@@ -725,10 +618,8 @@ export const useTimetableStore = create<TimetableStore>()(
             })
           : current.sections;
 
-        // Recompute sectionIds for classes based on resolved sections
         const finalClasses = recomputeClassSectionIds(classes, sections);
 
-        // ── Detect entry format ──
         const rawEntries = Array.isArray(raw.entries)
           ? (raw.entries as Record<string, unknown>[])
           : [];
@@ -738,7 +629,6 @@ export const useTimetableStore = create<TimetableStore>()(
           typeof rawEntries[0].teacher === 'string' &&
           typeof rawEntries[0].teacherId !== 'string';
 
-        // ── Helper: resolve class display name → classId + sectionId ──
         const resolveClass = (
           classDisplay: string
         ): { classId: string; sectionId: string } => {
@@ -761,7 +651,6 @@ export const useTimetableStore = create<TimetableStore>()(
           };
         };
 
-        // ── Transform entries ──
         let entries: Entry[];
 
         if (isHumanReadable) {
@@ -800,7 +689,6 @@ export const useTimetableStore = create<TimetableStore>()(
           }));
         }
 
-        // ── Transform substitutes ──
         const rawSubstitutes = Array.isArray(raw.substitutes)
           ? (raw.substitutes as Record<string, unknown>[])
           : [];
@@ -832,7 +720,6 @@ export const useTimetableStore = create<TimetableStore>()(
             );
             const { classId, sectionId } = resolveClass(classDisplay);
 
-            // Find matching entry by day + period + original teacher + class/section/subject
             const matchingEntry = entries.find(
               (e) =>
                 e.day === day &&
@@ -871,9 +758,6 @@ export const useTimetableStore = create<TimetableStore>()(
           }));
         }
 
-        // ── Transform assignments ──
-        // Export format: [{teacher: "Name", class: "Class 10 (A)", subject: "Math"}]
-        // ID-based format:  [{teacherId, subjectId, classId, sectionId}]
         const rawAssignments = Array.isArray(raw.assignments)
           ? (raw.assignments as Record<string, unknown>[])
           : [];
@@ -917,9 +801,6 @@ export const useTimetableStore = create<TimetableStore>()(
           }));
         }
 
-        // ── Set the full state ──
-        // Use `raw` for all reads (handles .data/.state wrappers)
-        // Use `finalClasses` which has recomputed sectionIds
         set({
           schoolName:
             typeof raw.schoolName === 'string'
@@ -959,9 +840,6 @@ export const useTimetableStore = create<TimetableStore>()(
         });
       },
 
-      /**
-       * Resets the entire store to its default state.
-       */
       clearAllData: () => {
         set({ ...DEFAULT_STATE });
       },
@@ -969,7 +847,6 @@ export const useTimetableStore = create<TimetableStore>()(
     {
       name: 'timetable-wiz-data',
       storage: createJSONStorage(() => {
-        // SSR guard: localStorage is only available in the browser
         if (typeof window === 'undefined') {
           return {
             getItem: () => null,
@@ -982,7 +859,6 @@ export const useTimetableStore = create<TimetableStore>()(
       merge: (persisted: unknown, current: TimetableStore): TimetableStore =>
         fullReplacementMerge(persisted, current) as TimetableStore,
 
-      // Only persist state data (not action functions)
       partialize: (state: TimetableStore): TimetableState => ({
         schoolName: state.schoolName,
         organizationName: state.organizationName,
