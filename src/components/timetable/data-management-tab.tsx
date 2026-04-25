@@ -507,22 +507,28 @@ function validateJsonData(data: unknown): { valid: boolean; errors: string[]; pa
 
   const obj = data as Record<string, any>;
 
-  // Check required arrays
-  const requiredArrays = ['sections', 'classes', 'teachers', 'subjects', 'assignments', 'entries', 'substitutes'];
-  for (const key of requiredArrays) {
-    if (!Array.isArray(obj[key])) {
-      errors.push(`Missing or invalid "${key}" array.`);
+  // Be lenient: missing arrays are auto-defaulted to [] so older / partial
+  // backups still import. Only hard-fail if NOTHING usable is present.
+  const arrayKeys = ['sections', 'classes', 'teachers', 'subjects', 'assignments', 'entries', 'substitutes'];
+  for (const key of arrayKeys) {
+    if (obj[key] === undefined || obj[key] === null) {
+      obj[key] = [];
+    } else if (!Array.isArray(obj[key])) {
+      errors.push(`Field "${key}" must be an array.`);
     }
   }
 
-  // Check schoolName
-  if (typeof obj.schoolName !== 'string') {
-    errors.push('Missing or invalid "schoolName" field.');
+  if (typeof obj.schoolName !== 'string' || !obj.schoolName.trim()) {
+    obj.schoolName = 'My School';
   }
 
-  // Check timings
   if (!obj.timings || typeof obj.timings !== 'object') {
-    errors.push('Missing or invalid "timings" object.');
+    obj.timings = {};
+  }
+
+  const hasAnyData = arrayKeys.some((k) => Array.isArray(obj[k]) && obj[k].length > 0);
+  if (!hasAnyData && errors.length === 0) {
+    errors.push('Backup file is empty — no sections, classes, teachers, subjects, entries or substitutes found.');
   }
 
   if (errors.length > 0) {
@@ -654,9 +660,21 @@ function JsonBackupPanel() {
         substitutes: importPreview.substitutes,
       });
 
+      // Read the post-import state so the toast reflects what was actually
+      // accepted by the store after referential-integrity filtering.
+      const after = useTimetableStore.getState();
+      const droppedEntries = (importPreview.entries?.length ?? 0) - after.entries.length;
+      const droppedSubs = (importPreview.substitutes?.length ?? 0) - after.substitutes.length;
+
       toast({
         title: 'JSON Backup Imported',
-        description: `Restored "${importPreview.schoolName}" successfully.`,
+        description:
+          `Restored "${after.schoolName}": ${after.classes.length} classes, ` +
+          `${after.teachers.length} teachers, ${after.entries.length} timetable entries, ` +
+          `${after.substitutes.length} substitutes.` +
+          (droppedEntries > 0 || droppedSubs > 0
+            ? ` (${droppedEntries} entries / ${droppedSubs} substitutes dropped due to missing references.)`
+            : ''),
       });
 
       setImportPreview(null);
@@ -670,6 +688,7 @@ function JsonBackupPanel() {
       setIsImporting(false);
     }
   };
+
 
   return (
     <>
