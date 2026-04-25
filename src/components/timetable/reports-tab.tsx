@@ -2068,8 +2068,15 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
 
   /* ── Landscape single-sheet: table fills full A4 page ── */
   const landscapeCss = isLandscape && sheetsPerPage === 1 ? `
-  .timetable-page { height: calc(100vh - 30px); display: flex; flex-direction: column; }
+  .timetable-page { height: calc(100vh - 30px); display: flex; flex-direction: column; page-break-before: auto; }
+  .timetable-page + .timetable-page { page-break-before: always; break-before: page; }
   .timetable-page .page-header { flex-shrink: 0; }
+  .timetable-page .page-header .school-name { font-size: 22px; letter-spacing: 0.6px; }
+  .timetable-page .page-header .report-title { font-size: 13px; }
+  .timetable-page .page-header .report-sub { font-size: 11px; }
+  .timetable-page .page-header .header-bar { height: 2.5px; margin-bottom: 8px; }
+  .timetable-page .page-header { padding-bottom: 8px; margin-bottom: 10px; }
+  .timetable-page .custom-header { font-size: 9.5px; }
   .timetable-page table.tt { flex: 1; table-layout: fixed; height: auto; }
   .timetable-page table.tt td, .timetable-page table.tt th { height: auto; }
   .timetable-page .tp { width: 80px; min-width: 80px; font-size: 8.5px; }
@@ -2080,6 +2087,7 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
   .timetable-page .tn { font-size: 7px; }
   .timetable-page table.tt th { font-size: 9px; padding: 5px 3px; }
   .timetable-page table.tt td { padding: 4px 3px; }
+  .timetable-page ~ .page-footer { font-size: 8px; padding-top: 5px; border-top-width: 1.5px; }
   ` : '';
 
   return `
@@ -2092,7 +2100,7 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
   /* ── Fonts ── */
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-    font-size: 9.5px;
+    font-size: 10.5px;
     line-height: 1.45;
     color: #111827;
     background: #fff;
@@ -2129,36 +2137,36 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
   /* ── Page header ── */
   .page-header {
     text-align: center;
-    padding-bottom: 6px;
-    margin-bottom: 8px;
+    padding-bottom: 8px;
+    margin-bottom: 10px;
   }
   .page-header .header-bar {
     width: 100%;
-    height: 2px;
+    height: 2.5px;
     background: #111827;
-    margin-bottom: 6px;
+    margin-bottom: 8px;
   }
   .page-header .school-name {
-    font-size: 17px;
+    font-size: 20px;
     font-weight: 800;
     color: #111827;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.6px;
     font-family: Georgia, 'Times New Roman', 'Noto Serif', serif;
   }
   .page-header .report-title {
-    font-size: 10.5px;
+    font-size: 12px;
     font-weight: 600;
     color: #374151;
-    margin-top: 2px;
+    margin-top: 3px;
   }
   .page-header .report-sub {
-    font-size: 9px;
+    font-size: 10px;
     color: #6B7280;
-    margin-top: 1px;
+    margin-top: 2px;
   }
   .custom-header {
     text-align: center;
-    font-size: 8px;
+    font-size: 9px;
     color: #6B7280;
     font-style: italic;
     margin-top: 3px;
@@ -2167,13 +2175,14 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
   /* ── Compact sheet label ── */
   .sheet-label {
     text-align: center;
-    padding: 2px 0 4px;
-    margin-bottom: 4px;
+    padding: 2px 0 5px;
+    margin-bottom: 5px;
     border-bottom: 1.5px solid #111827;
   }
   .sheet-label-sub {
-    font-size: 7.5px;
-    color: #6B7280;
+    font-size: 9px;
+    color: #374151;
+    font-weight: 600;
   }
 
   /* ── Footer ── */
@@ -2183,14 +2192,15 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
     display: table;
     width: 100%;
     border-top: 1px solid #D4D4D8;
-    padding-top: 3px;
-    font-size: 6.5px;
-    color: #9CA3AF;
+    padding-top: 4px;
+    font-size: 7.5px;
+    color: #6B7280;
+    font-weight: 600;
   }
   .page-num::after { content: counter(page); }
-  .page-footer .f-left   { display: table-cell; text-align: left;   width: 33%; padding: 0 6px; }
-  .page-footer .f-center { display: table-cell; text-align: center; width: 34%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .page-footer .f-right  { display: table-cell; text-align: right;  width: 33%; padding: 0 6px; }
+  .page-footer .f-left   { display: table-cell; text-align: left;   width: 33%; padding: 0 6px; white-space: nowrap; }
+  .page-footer .f-center { display: table-cell; text-align: center; width: 34%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+  .page-footer .f-right  { display: table-cell; text-align: right;  width: 33%; padding: 0 6px; white-space: nowrap; }
   .watermark { color: #D4D4D8; font-style: italic; letter-spacing: 0.3px; }
   .custom-footer {
     text-align: center;
@@ -2216,12 +2226,12 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
   /* ── Table header row ── */
   table.tt th {
     background: #111827;
-    font-size: 7.5px;
+    font-size: 8.5px;
     font-weight: 700;
     color: #fff;
     letter-spacing: 0.5px;
     text-transform: uppercase;
-    padding: 4px 3px;
+    padding: 5px 3px;
   }
   table.tt th:first-child {
     background: #374151;
@@ -2230,7 +2240,7 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
   /* ── Period label column ── */
   .tp {
     background: #F3F4F6 !important;
-    font-size: 7.5px;
+    font-size: 8.5px;
     width: 66px;
     min-width: 66px;
     border-right: 1px solid #9CA3AF !important;
@@ -2239,18 +2249,18 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
     display: block;
     font-weight: 700;
     color: #111827;
-    font-size: 7.5px;
+    font-size: 8.5px;
   }
   .tt-time {
     display: block;
-    font-size: 5.5px;
+    font-size: 6.5px;
     color: #6B7280;
     margin-top: 0.5px;
   }
 
   /* ── Subject cells (filled) ── */
   .tf {
-    font-size: 8.5px;
+    font-size: 9.5px;
   }
   .tf b {
     font-weight: 700;
@@ -2258,17 +2268,17 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
   }
   .tn {
     display: block;
-    font-size: 6px;
-    color: #4B5563;
+    font-size: 7px;
+    color: #374151;
     margin-top: 0.5px;
     font-weight: 400;
     font-style: italic;
-    opacity: 0.75;
+    opacity: 0.85;
   }
 
   /* ── Break rows ── */
   .tb {
-    font-size: 8px;
+    font-size: 9px;
     color: #374151;
     background: #F3F4F6 !important;
     font-style: italic;
@@ -2343,6 +2353,7 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
     .page-footer { position: fixed; bottom: 0; }
     table.tt { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .timetable-page { counter-increment: page; }
+    .timetable-page + .timetable-page { page-break-before: always !important; break-before: page !important; }
     .sheet-slot:nth-child(${sheetsPerPage}n) { counter-increment: page; }
   }`;
 }
