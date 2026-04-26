@@ -2099,6 +2099,11 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
     break-inside: avoid;
     padding: 2px 0;
     overflow: hidden;
+  }
+  body.sheets-multi .page-group .sheet-slot + .sheet-slot {
+    margin-top: 10px;
+    border-top: 1px solid #D4D4D8;
+    padding-top: 10px;
   }` : '\n  body.sheets-multi .sheet-slot { width: 100%; }';
 
   /* ── Landscape single-sheet: table fills full A4 page ── */
@@ -2155,9 +2160,9 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
     height: 1.5px;
     margin-bottom: 2px;
   }
-  body.sheets-multi .page-header .school-name { font-size: 9px; letter-spacing: 0.3px; }
-  body.sheets-multi .page-header .report-title { font-size: 7px; margin-top: 0; }
-  body.sheets-multi .page-header .report-sub { font-size: 6px; margin-top: 0; }
+  body.sheets-multi .page-header .school-name { font-size: 10px; letter-spacing: 0.3px; }
+  body.sheets-multi .page-header .report-title { font-size: 9px; margin-top: 0; }
+  body.sheets-multi .page-header .report-sub { font-size: 8px; margin-top: 0; }
   body.sheets-multi .custom-header { font-size: 6px; margin-top: 1px; }
   body.sheets-multi table.tt { font-size: 6.5px; }
   body.sheets-multi table.tt th { font-size: 6px; letter-spacing: 0.4px; }
@@ -2167,8 +2172,8 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
   body.sheets-multi .tt-time { font-size: 5px; }
   body.sheets-multi .tf b { font-size: 6.5px; }
   body.sheets-multi .tn { font-size: 5px; }
-  body.sheets-multi .sheet-label { padding: 1px 0 2px; margin-bottom: 2px; }
-  body.sheets-multi .sheet-label-sub { font-size: 5.5px; }
+  body.sheets-multi .sheet-label { padding: 2px 0 4px; margin-bottom: 3px; }
+  body.sheets-multi .sheet-label-sub { font-size: 8px; }
 
   /* ── Page header ── */
   .page-header {
