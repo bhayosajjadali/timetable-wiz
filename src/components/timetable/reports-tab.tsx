@@ -170,6 +170,7 @@ export function ReportsTab() {
   const [exportDetailMode, setExportDetailMode] = useState<DetailMode>('show-periods');
   const [exportDaywiseDays, setExportDaywiseDays] = useState<string[]>([]);
   const [exportDaywiseClasses, setExportDaywiseClasses] = useState<string[]>([]);
+  const [exportPcTeachers, setExportPcTeachers] = useState<string[]>([]);
 
   const { toast } = useToast();
   const { downloadPdf, isGenerating } = usePdfDownload();
@@ -276,7 +277,8 @@ export function ReportsTab() {
             toast({ title: 'Nothing to export', description: 'Select at least one day to export.', variant: 'destructive' });
             return;
           }
-          const teacherData = computeTeacherPeriodData(storeTeachers, entries, activeDays, effectiveDays, storeTimings, subjects, storeClasses, storeSections);
+          const effectiveTeachers = exportPcTeachers.length === 0 ? storeTeachers : storeTeachers.filter((t) => exportPcTeachers.includes(t.id));
+          const teacherData = computeTeacherPeriodData(effectiveTeachers, entries, activeDays, effectiveDays, storeTimings, subjects, storeClasses, storeSections);
           html = buildPeriodCountReportHtml({
             schoolName,
             teacherData,
@@ -287,11 +289,11 @@ export function ReportsTab() {
             detailMode: exportDetailMode,
             nonBreakPeriodsCount: countNonBreakPeriods(storeTimings),
             maxPossiblePerTeacher: effectiveDays.length * countNonBreakPeriods(storeTimings),
-            teachersCount: storeTeachers.length,
+            teachersCount: effectiveTeachers.length,
             printSettings: exportSettings,
             timings: storeTimings,
           });
-          title = `Period_Count_${effectiveDays.length}days`;
+          title = `Period_Count_${effectiveDays.length}days_${effectiveTeachers.length}teachers`;
           break;
         }
         case 'daywise': {
@@ -326,7 +328,7 @@ export function ReportsTab() {
       console.error('Export failed:', err);
       toast({ title: 'Export failed', description: 'An error occurred. Please try again.', variant: 'destructive' });
     }
-  }, [exportType, exportShowBreaks, exportShowEmpty, exportOrientation, exportSheetsPerPage, exportHeaderContent, exportFooterContent, exportSelectedClasses, exportSelectedTeachers, exportSelectedDays, exportDetailMode, exportDaywiseDays, exportDaywiseClasses, classSectionOpts, exportSettings, toast, downloadPdf, storeSnapshot]);
+  }, [exportType, exportShowBreaks, exportShowEmpty, exportOrientation, exportSheetsPerPage, exportHeaderContent, exportFooterContent, exportSelectedClasses, exportSelectedTeachers, exportSelectedDays, exportDetailMode, exportPcTeachers, exportDaywiseDays, exportDaywiseClasses, classSectionOpts, exportSettings, toast, downloadPdf, storeSnapshot]);
 
   // ── PDF Export summary text ──
   const exportSummary = useMemo(() => {
@@ -344,7 +346,8 @@ export function ReportsTab() {
       }
       case 'period-count': {
         const daysCount = exportSelectedDays.length || timings.days.length;
-        parts.push(`${daysCount} day${daysCount !== 1 ? 's' : ''} selected`);
+        const tchrCount = exportPcTeachers.length || teachers.length;
+        parts.push(`${daysCount} day${daysCount !== 1 ? 's' : ''}, ${tchrCount} teacher${tchrCount !== 1 ? 's' : ''}`);
         const modeLabels: Record<DetailMode, string> = { 'count-only': 'Count Only', 'show-periods': 'Show Periods', 'show-total': 'Totals Summary' };
         parts.push(modeLabels[exportDetailMode]);
         break;
@@ -359,7 +362,7 @@ export function ReportsTab() {
     parts.push(exportOrientation === 'landscape' ? 'Landscape' : 'Portrait');
     parts.push(`${exportSheetsPerPage} sheet${exportSheetsPerPage !== 1 ? 's' : ''}/page`);
     return parts.join(', ');
-  }, [exportType, exportSelectedClasses, exportSelectedTeachers, exportSelectedDays, exportDetailMode, exportDaywiseDays, exportDaywiseClasses, exportOrientation, exportSheetsPerPage, classSectionOpts, teachers, timings.days]);
+  }, [exportType, exportSelectedClasses, exportSelectedTeachers, exportSelectedDays, exportDetailMode, exportPcTeachers, exportDaywiseDays, exportDaywiseClasses, exportOrientation, exportSheetsPerPage, classSectionOpts, teachers, timings.days]);
 
   return (
     <div className="space-y-4">
@@ -647,6 +650,21 @@ export function ReportsTab() {
                             </label>
                           ))}
                         </div>
+                      </div>
+                      <Separator />
+                      {/* Teacher filter for period-count export */}
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Filter Teachers</Label>
+                        <CheckDropdown
+                          label="All Teachers"
+                          icon={UserCheck}
+                          options={teacherOpts}
+                          selected={exportPcTeachers}
+                          onToggle={toggleItem(setExportPcTeachers)}
+                          onSelectAll={selectAllItems(setExportPcTeachers, allTeacherKeys)}
+                          allLabel="All Teachers"
+                          searchable
+                        />
                       </div>
                       <Separator />
                       <div className="space-y-2">
@@ -1519,16 +1537,25 @@ function TeacherPeriodCountReport() {
   const activeDays = timings.days;
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
   const [detailMode, setDetailMode] = useState<DetailMode>('show-periods');
+  const [selectedTeacherIds, setSelectedTeacherIds] = useState<string[]>([]);
 
   const toggleDay = (day: string) => {
     setSelectedDays((prev) => prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]);
   };
+  const toggleTeacher = (id: string) => {
+    setSelectedTeacherIds((prev) => prev.includes(id) ? prev.filter((v) => v !== id) : [...prev, id]);
+  };
+  const toggleAllTeachers = () => {
+    setSelectedTeacherIds((prev) => prev.length === teachers.length ? [] : teachers.map((t) => t.id));
+  };
 
   const filteredSelectedDays = activeDays.filter((d) => selectedDays.includes(d));
+  const activeTeachers = selectedTeacherIds.length === 0 ? teachers : teachers.filter((t) => selectedTeacherIds.includes(t.id));
+  const teacherFilterOpts = teachers.map((t) => ({ value: t.id, label: t.name + ' (' + t.shortName + ')' }));
 
   const teacherData = useMemo(() => {
-    return computeTeacherPeriodData(teachers, entries, activeDays, filteredSelectedDays, timings, subjects, classes, sections);
-  }, [teachers, entries, activeDays, filteredSelectedDays, timings, subjects, classes, sections]);
+    return computeTeacherPeriodData(activeTeachers, entries, activeDays, filteredSelectedDays, timings, subjects, classes, sections);
+  }, [activeTeachers, entries, activeDays, filteredSelectedDays, timings, subjects, classes, sections]);
 
   const nonBreakPeriodsCount = useMemo(() => countNonBreakPeriods(timings), [timings]);
   const maxPossiblePerTeacher = filteredSelectedDays.length * nonBreakPeriodsCount;
@@ -1571,6 +1598,30 @@ function TeacherPeriodCountReport() {
                 </label>
               ))}
             </div>
+          </div>
+
+          <Separator />
+
+          {/* Teacher Filter */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Filter Teachers</Label>
+              <CheckDropdown
+                label="All Teachers"
+                icon={UserCheck}
+                options={teacherFilterOpts}
+                selected={selectedTeacherIds}
+                onToggle={toggleTeacher}
+                onSelectAll={toggleAllTeachers}
+                allLabel="All Teachers"
+                searchable
+              />
+            </div>
+            {selectedTeacherIds.length > 0 && selectedTeacherIds.length < teachers.length && (
+              <p className="text-[10px] text-muted-foreground">
+                Showing {selectedTeacherIds.length} of {teachers.length} teachers
+              </p>
+            )}
           </div>
 
           <Separator />
@@ -1618,11 +1669,11 @@ function TeacherPeriodCountReport() {
               <div>
                 <CardTitle className="text-lg">Preview</CardTitle>
                 <CardDescription>
-                  {filteredSelectedDays.length} day{filteredSelectedDays.length !== 1 ? 's' : ''} selected | {teachers.length} teachers
+                  {filteredSelectedDays.length} day{filteredSelectedDays.length !== 1 ? 's' : ''} selected | {activeTeachers.length}{selectedTeacherIds.length > 0 && selectedTeacherIds.length < teachers.length ? '/' + teachers.length : ''} teachers
                 </CardDescription>
               </div>
               <Badge variant="secondary">
-                {teachers.length} teachers
+                {activeTeachers.length}{selectedTeacherIds.length > 0 && selectedTeacherIds.length < teachers.length ? '/' + teachers.length : ''} teachers
               </Badge>
             </div>
           </CardHeader>
@@ -1698,8 +1749,8 @@ function TeacherPeriodCountReport() {
 
             <div className="flex flex-wrap gap-3 mt-4 justify-center">
               <div className="text-center px-4 py-2 bg-muted rounded-lg border">
-                <div className="text-lg font-bold text-[#1B2A4A]">{teachers.length}</div>
-                <div className="text-[10px] text-muted-foreground">Teachers</div>
+                <div className="text-lg font-bold text-[#1B2A4A]">{activeTeachers.length}</div>
+                <div className="text-[10px] text-muted-foreground">{selectedTeacherIds.length > 0 && selectedTeacherIds.length < teachers.length ? `${activeTeachers.length}/${teachers.length}` : 'Teachers'}</div>
               </div>
               <div className="text-center px-4 py-2 bg-muted rounded-lg border">
                 <div className="text-lg font-bold text-[#1B2A4A]">{filteredSelectedDays.length}</div>
@@ -1712,7 +1763,7 @@ function TeacherPeriodCountReport() {
               <div className="text-center px-4 py-2 bg-muted rounded-lg border">
                 <div className="text-lg font-bold text-[#34C759]">
                   {maxPossiblePerTeacher > 0
-                    ? Math.round((teacherData.reduce((s, td) => s + td.totalForSelectedDays, 0) / (teachers.length * maxPossiblePerTeacher)) * 100)
+                    ? Math.round((teacherData.reduce((s, td) => s + td.totalForSelectedDays, 0) / (activeTeachers.length * maxPossiblePerTeacher)) * 100)
                     : 0}%
                 </div>
                 <div className="text-[10px] text-muted-foreground">Utilization</div>
