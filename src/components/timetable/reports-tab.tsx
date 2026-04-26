@@ -1067,9 +1067,9 @@ function buildPeriodCountReportHtml(params: {
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   const isLandscape = orientation === 'landscape';
 
-  const fontSize = tablesPerPage === 1 ? (isLandscape ? '8px' : '7px') : '6px';
-  const headerFontSize = tablesPerPage === 1 ? (isLandscape ? '7px' : '6.5px') : '5.5px';
-  const cellPad = tablesPerPage === 1 ? '2px 3px' : '1px 2px';
+  const fontSize = tablesPerPage === 1 ? (isLandscape ? '14px' : '14px') : '6px';
+  const headerFontSize = tablesPerPage === 1 ? (isLandscape ? '13px' : '12px') : '5.5px';
+  const cellPad = tablesPerPage === 1 ? '4px 6px' : '1px 2px';
 
   const sorted = [...teacherData].sort((a, b) => b.totalForSelectedDays - a.totalForSelectedDays);
 
@@ -1206,7 +1206,17 @@ function buildPeriodCountReportHtml(params: {
     line-height: 1.45;
     color: #111827;
     background: #fff;
+    ${tablesPerPage === 1 ? 'display: flex; flex-direction: column; min-height: 100vh;' : ''}
   }
+  ${tablesPerPage === 1 ? `
+  body > .report-header { flex-shrink: 0; }
+  body > .pc-stretch-wrap { flex: 1 1 auto; display: flex; flex-direction: column; }
+  body > .pc-stretch-wrap .pc-table { flex: 1 1 auto; }
+  body > .pc-stretch-wrap .pc-table tbody { height: 100%; }
+  body > .summary-bar { flex-shrink: 0; }
+  body > .report-footer { flex-shrink: 0; }
+  body > .custom-footer { flex-shrink: 0; }
+  ` : ''}
   ${tablesPerPage > 1 ? `
   body.sheets-multi-pc {
     display: flex;
@@ -1476,7 +1486,9 @@ function buildPeriodCountReportHtml(params: {
     ${customHeaderHtml}
   </div>`}
 
+  ${tablesPerPage === 1 ? '<div class="pc-stretch-wrap">' : ''}
   ${tablesHtml}
+  ${tablesPerPage === 1 ? '</div>' : ''}
 
   <div class="summary-bar">
     <div class="summary-item"><span class="summary-num">${teachersCount}</span><span class="summary-label">Teachers</span></div>
