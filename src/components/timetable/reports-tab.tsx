@@ -1111,7 +1111,6 @@ function buildPeriodCountReportHtml(params: {
         }
         tableRows += `<td class="td-detail">${detailParts.join(' | ')}</td>`;
       }
-      tableRows += `<td class="td-signature"></td>`;
       tableRows += '</tr>';
     });
 
@@ -1128,7 +1127,6 @@ function buildPeriodCountReportHtml(params: {
     if (detailMode === 'show-periods') {
       tablesHtml += '<th class="th-detail">Periods</th>';
     }
-    tablesHtml += `<th class="th-signature">Signature</th>`;
     tablesHtml += `</tr></thead><tbody>${tableRows}</tbody></table>`;
   } else {
     const chunkSize = Math.max(1, Math.ceil(sorted.length / tablesPerPage));
@@ -1161,7 +1159,6 @@ function buildPeriodCountReportHtml(params: {
           }
           tableRows += `<td class="td-detail">${detailParts.join(' | ')}</td>`;
         }
-        tableRows += `<td class="td-signature"></td>`;
         tableRows += '</tr>';
       });
 
@@ -1184,7 +1181,6 @@ function buildPeriodCountReportHtml(params: {
       if (detailMode === 'show-periods') {
         tablesHtml += '<th class="th-detail">Periods</th>';
       }
-      tablesHtml += `<th class="th-signature">Signature</th>`;
       tablesHtml += `</tr></thead>
             <tbody>${tableRows}</tbody>
           </table>
@@ -1348,20 +1344,6 @@ function buildPeriodCountReportHtml(params: {
     font-size: ${headerFontSize};
     font-weight: 600;
     text-align: left !important;
-  }
-  .th-signature {
-    background: #111827;
-    color: #fff;
-    font-size: ${headerFontSize};
-    font-weight: 600;
-    min-width: 90px;
-    width: 110px;
-  }
-  .td-signature {
-    min-width: 90px;
-    width: 110px;
-    border-bottom: 1px solid #9CA3AF;
-    height: 28px;
   }
 
   /* ── Data cells ── */
@@ -1645,7 +1627,6 @@ function TeacherPeriodCountReport() {
                     {detailMode === 'show-periods' && (
                       <th className="border px-2 py-1.5 text-left text-xs font-semibold bg-[#1B2A4A] text-white">Periods</th>
                     )}
-                    <th className="border px-2 py-1.5 text-center text-xs font-semibold bg-[#1B2A4A] text-white">Signature</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1682,7 +1663,6 @@ function TeacherPeriodCountReport() {
                           })}
                         </td>
                       )}
-                      <td className="border px-2 py-1 text-center text-xs text-muted-foreground min-w-[80px]"></td>
                     </tr>
                   ))}
                 </tbody>
@@ -2086,11 +2066,11 @@ function groupSlotsIntoPages(slots: string[], sheetsPerPage: number): string {
 /* ---------- Shared professional CSS for timetable grid reports ---------- */
 
 function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string {
-  // A4 portrait usable height: 297mm - 10mm top - 14mm bottom = 273mm
-  // separator gap per divider: 10px margin-top + 1px border + 8px padding-top = 19px
-  const pageHeightMm = isLandscape ? 186 : 273;
-  const totalGapsPx = (sheetsPerPage - 1) * 19;
-  const pageHeightPx = Math.floor(pageHeightMm * 3.7795);
+  // A4 usable height: portrait 273mm, landscape 186mm (margins: 10mm top, 14mm bottom)
+  // Separator per gap = 6px margin + 1px border + 6px padding = 13px
+  // Slot height = (pageHeightPx - totalGapsPx) / sheetsPerPage
+  const pageHeightPx = Math.floor((isLandscape ? 186 : 273) * 3.7795);
+  const totalGapsPx  = (sheetsPerPage - 1) * 13;
   const slotHeightPx = Math.floor((pageHeightPx - totalGapsPx) / sheetsPerPage);
 
   const nUpCss = sheetsPerPage > 1 ? `
@@ -2115,8 +2095,8 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
   }
   body.sheets-multi .page-group .sheet-slot {
     height: ${slotHeightPx}px;
-    max-height: ${slotHeightPx}px;
     min-height: ${slotHeightPx}px;
+    max-height: ${slotHeightPx}px;
     flex-shrink: 0;
     page-break-inside: avoid;
     break-inside: avoid;
@@ -2136,9 +2116,9 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
     height: 100%;
   }
   body.sheets-multi .page-group .sheet-slot + .sheet-slot {
-    margin-top: 10px;
+    margin-top: 6px;
     border-top: 1px solid #D4D4D8;
-    padding-top: 8px;
+    padding-top: 6px;
   }` : '\n  body.sheets-multi .sheet-slot { width: 100%; }';
 
   /* ── Landscape single-sheet: table fills full A4 page ── */
@@ -2208,7 +2188,7 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
   body.sheets-multi .tt-time { font-size: 5px; }
   body.sheets-multi .tf b { font-size: 6.5px; }
   body.sheets-multi .tn { font-size: 5px; }
-  body.sheets-multi .sheet-label { padding: 2px 0 4px; margin-bottom: 3px; flex-shrink: 0; }
+  body.sheets-multi .sheet-label { padding: 2px 0 3px; margin-bottom: 2px; flex-shrink: 0; }
   body.sheets-multi .sheet-label-sub { font-size: 8px; }
 
   /* ── Page header ── */
