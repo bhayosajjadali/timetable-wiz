@@ -2070,6 +2070,9 @@ function groupSlotsIntoPages(slots: string[], sheetsPerPage: number): string {
 /* ---------- Shared professional CSS for timetable grid reports ---------- */
 
 function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string {
+  // Gap between slots: 10px margin-top + 1px border + 10px padding-top = 21px per gap
+  // Total gap budget = (sheetsPerPage - 1) * 21
+  const totalGaps = (sheetsPerPage - 1) * 21;
   const nUpCss = sheetsPerPage > 1 ? `
   body.sheets-multi {
     margin: 0;
@@ -2084,7 +2087,6 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
     break-after: page;
     page-break-inside: avoid;
     break-inside: avoid;
-    overflow: hidden;
     padding-bottom: 14px;
   }
   body.sheets-multi .page-group:last-child {
@@ -2094,10 +2096,16 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
   body.sheets-multi .page-group .sheet-slot {
     flex: 1 1 0;
     min-height: 0;
-    max-height: calc((100vh - 14px) / ${sheetsPerPage});
+    max-height: calc((100vh - 14px - ${totalGaps}px) / ${sheetsPerPage});
     page-break-inside: avoid;
     break-inside: avoid;
-    padding: 2px 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  body.sheets-multi .page-group .sheet-slot table.tt {
+    flex: 1 1 0;
+    min-height: 0;
     overflow: hidden;
   }
   body.sheets-multi .page-group .sheet-slot + .sheet-slot {
@@ -2155,6 +2163,7 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
   body.sheets-multi .page-header {
     padding-bottom: 2px;
     margin-bottom: 3px;
+    flex-shrink: 0;
   }
   body.sheets-multi .page-header .header-bar {
     height: 1.5px;
@@ -2164,15 +2173,17 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
   body.sheets-multi .page-header .report-title { font-size: 9px; margin-top: 0; }
   body.sheets-multi .page-header .report-sub { font-size: 8px; margin-top: 0; }
   body.sheets-multi .custom-header { font-size: 6px; margin-top: 1px; }
-  body.sheets-multi table.tt { font-size: 6.5px; }
-  body.sheets-multi table.tt th { font-size: 6px; letter-spacing: 0.4px; }
+  body.sheets-multi table.tt { font-size: 6.5px; width: 100%; flex: 1 1 0; height: 100%; }
+  body.sheets-multi table.tt th { font-size: 6px; letter-spacing: 0.4px; padding: 2px 1px; }
   body.sheets-multi table.tt td { padding: 1px 1px; }
+  body.sheets-multi table.tt tbody { height: 100%; }
+  body.sheets-multi table.tt tbody tr { height: auto; }
   body.sheets-multi .tp { width: 44px; min-width: 44px; font-size: 6px; }
   body.sheets-multi .pl { font-size: 6px; }
   body.sheets-multi .tt-time { font-size: 5px; }
   body.sheets-multi .tf b { font-size: 6.5px; }
   body.sheets-multi .tn { font-size: 5px; }
-  body.sheets-multi .sheet-label { padding: 2px 0 4px; margin-bottom: 3px; }
+  body.sheets-multi .sheet-label { padding: 2px 0 4px; margin-bottom: 3px; flex-shrink: 0; }
   body.sheets-multi .sheet-label-sub { font-size: 8px; }
 
   /* ── Page header ── */
