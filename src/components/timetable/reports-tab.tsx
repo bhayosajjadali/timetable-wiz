@@ -1093,8 +1093,7 @@ function buildPeriodCountReportHtml(params: {
       const rowBg = idx % 2 === 0 ? 'background:#FFFFFF;' : 'background:#F8F9FA;';
       tableRows += `<tr style="${rowBg}">
         <td class="td-sno">${sorted.indexOf(td) + 1}</td>
-        <td class="td-name">${esc(t.name)}</td>
-        <td class="td-short">${esc(t.shortName)}</td>`;
+        <td class="td-name">${esc(t.name)}</td>`;
       for (const day of filteredSelectedDays) {
         const cnt = td.dayCounts[day] || 0;
         const bgClass = cnt === 0 ? 'zero' : cnt >= nonBreakPeriodsCount ? 'full' : '';
@@ -1112,6 +1111,7 @@ function buildPeriodCountReportHtml(params: {
         }
         tableRows += `<td class="td-detail">${detailParts.join(' | ')}</td>`;
       }
+      tableRows += `<td class="td-signature"></td>`;
       tableRows += '</tr>';
     });
 
@@ -1120,8 +1120,7 @@ function buildPeriodCountReportHtml(params: {
         <thead>
           <tr>
             <th class="th-sno">#</th>
-            <th class="th-name">Teacher Name</th>
-            <th class="th-short">Code</th>`;
+            <th class="th-name">Teacher Name</th>`;
     for (const day of filteredSelectedDays) {
       tablesHtml += `<th class="th-day">${esc(day)}</th>`;
     }
@@ -1129,6 +1128,7 @@ function buildPeriodCountReportHtml(params: {
     if (detailMode === 'show-periods') {
       tablesHtml += '<th class="th-detail">Periods</th>';
     }
+    tablesHtml += `<th class="th-signature">Signature</th>`;
     tablesHtml += `</tr></thead><tbody>${tableRows}</tbody></table>`;
   } else {
     const chunkSize = Math.max(1, Math.ceil(sorted.length / tablesPerPage));
@@ -1161,6 +1161,7 @@ function buildPeriodCountReportHtml(params: {
           }
           tableRows += `<td class="td-detail">${detailParts.join(' | ')}</td>`;
         }
+        tableRows += `<td class="td-signature"></td>`;
         tableRows += '</tr>';
       });
 
@@ -1183,6 +1184,7 @@ function buildPeriodCountReportHtml(params: {
       if (detailMode === 'show-periods') {
         tablesHtml += '<th class="th-detail">Periods</th>';
       }
+      tablesHtml += `<th class="th-signature">Signature</th>`;
       tablesHtml += `</tr></thead>
             <tbody>${tableRows}</tbody>
           </table>
@@ -1346,6 +1348,20 @@ function buildPeriodCountReportHtml(params: {
     font-size: ${headerFontSize};
     font-weight: 600;
     text-align: left !important;
+  }
+  .th-signature {
+    background: #111827;
+    color: #fff;
+    font-size: ${headerFontSize};
+    font-weight: 600;
+    min-width: 90px;
+    width: 110px;
+  }
+  .td-signature {
+    min-width: 90px;
+    width: 110px;
+    border-bottom: 1px solid #9CA3AF;
+    height: 28px;
   }
 
   /* ── Data cells ── */
@@ -1622,7 +1638,6 @@ function TeacherPeriodCountReport() {
                   <tr>
                     <th className="border px-2 py-1.5 text-left text-xs font-semibold w-8 bg-[#1B2A4A] text-white">#</th>
                     <th className="border px-2 py-1.5 text-left text-xs font-semibold bg-[#1B2A4A] text-white">Teacher</th>
-                    <th className="border px-2 py-1.5 text-center text-xs font-semibold bg-[#1B2A4A] text-white">Code</th>
                     {filteredSelectedDays.map((day) => (
                       <th key={day} className="border px-2 py-1.5 text-center text-xs font-semibold bg-[#1B2A4A] text-white">{day.slice(0, 3)}</th>
                     ))}
@@ -1630,6 +1645,7 @@ function TeacherPeriodCountReport() {
                     {detailMode === 'show-periods' && (
                       <th className="border px-2 py-1.5 text-left text-xs font-semibold bg-[#1B2A4A] text-white">Periods</th>
                     )}
+                    <th className="border px-2 py-1.5 text-center text-xs font-semibold bg-[#1B2A4A] text-white">Signature</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1637,7 +1653,6 @@ function TeacherPeriodCountReport() {
                     <tr key={td.teacher.id} className={idx % 2 === 0 ? 'bg-card' : 'bg-muted/30'}>
                       <td className="border px-2 py-1 text-xs text-muted-foreground">{idx + 1}</td>
                       <td className="border px-2 py-1 text-sm font-medium whitespace-nowrap">{td.teacher.name}</td>
-                      <td className="border px-2 py-1 text-xs font-semibold text-center">{td.teacher.shortName}</td>
                       {filteredSelectedDays.map((day) => {
                         const cnt = td.dayCounts[day] || 0;
                         return (
@@ -1667,12 +1682,13 @@ function TeacherPeriodCountReport() {
                           })}
                         </td>
                       )}
+                      <td className="border px-2 py-1 text-center text-xs text-muted-foreground min-w-[80px]"></td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
                   <tr className="bg-muted font-semibold">
-                    <td colSpan={3} className="border px-2 py-1.5 text-xs text-right">Total Periods:</td>
+                    <td colSpan={2} className="border px-2 py-1.5 text-xs text-right">Total Periods:</td>
                     {filteredSelectedDays.map((day) => (
                       <td key={day} className="border px-2 py-1.5 text-center text-xs">
                         {teacherData.reduce((sum, td) => sum + (td.dayCounts[day] || 0), 0)}
@@ -2070,8 +2086,8 @@ function groupSlotsIntoPages(slots: string[], sheetsPerPage: number): string {
 /* ---------- Shared professional CSS for timetable grid reports ---------- */
 
 function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string {
-  // A4 usable height in px at 96dpi (portrait: 273mm, landscape: 186mm)
-  // Separator per gap = 10px margin + 1px border + 8px padding = 19px
+  // A4 portrait usable height: 297mm - 10mm top - 14mm bottom = 273mm
+  // separator gap per divider: 10px margin-top + 1px border + 8px padding-top = 19px
   const pageHeightMm = isLandscape ? 186 : 273;
   const totalGapsPx = (sheetsPerPage - 1) * 19;
   const pageHeightPx = Math.floor(pageHeightMm * 3.7795);
@@ -2183,8 +2199,8 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
   body.sheets-multi .page-header .school-name { font-size: 10px; letter-spacing: 0.3px; }
   body.sheets-multi .page-header .report-title { font-size: 9px; margin-top: 0; }
   body.sheets-multi .page-header .report-sub { font-size: 8px; margin-top: 0; }
-  body.sheets-multi .custom-header { font-size: 6px; margin-top: 1px; flex-shrink: 0; }
-  body.sheets-multi table.tt { font-size: 6.5px; flex: 1 1 0; min-height: 0; }
+  body.sheets-multi .custom-header { font-size: 6px; margin-top: 1px; }
+  body.sheets-multi table.tt { font-size: 6.5px; }
   body.sheets-multi table.tt th { font-size: 6px; letter-spacing: 0.4px; }
   body.sheets-multi table.tt td { padding: 1px 1px; }
   body.sheets-multi .tp { width: 44px; min-width: 44px; font-size: 6px; }
