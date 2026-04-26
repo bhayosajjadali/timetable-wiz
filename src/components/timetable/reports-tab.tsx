@@ -1067,9 +1067,9 @@ function buildPeriodCountReportHtml(params: {
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   const isLandscape = orientation === 'landscape';
 
-  const fontSize = tablesPerPage === 1 ? (isLandscape ? '14px' : '14px') : '6px';
-  const headerFontSize = tablesPerPage === 1 ? (isLandscape ? '13px' : '12px') : '5.5px';
-  const cellPad = tablesPerPage === 1 ? '4px 6px' : '1px 2px';
+  const fontSize = tablesPerPage === 1 ? (isLandscape ? '12px' : '12px') : '6px';
+  const headerFontSize = tablesPerPage === 1 ? (isLandscape ? '11px' : '10.5px') : '5.5px';
+  const cellPad = tablesPerPage === 1 ? '2px 4px' : '1px 2px';
 
   const sorted = [...teacherData].sort((a, b) => b.totalForSelectedDays - a.totalForSelectedDays);
 
@@ -1197,22 +1197,22 @@ function buildPeriodCountReportHtml(params: {
 <style>
   @page {
     size: A4 ${isLandscape ? 'landscape' : 'portrait'};
-    margin: 10mm 10mm 14mm 10mm;
+    margin: 6mm 8mm 6mm 8mm;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     font-size: ${fontSize};
-    line-height: 1.45;
+    line-height: 1.25;
     color: #111827;
     background: #fff;
-    ${tablesPerPage === 1 ? 'display: flex; flex-direction: column; min-height: 100vh;' : ''}
+    ${tablesPerPage === 1 ? 'display: flex; flex-direction: column; height: 100vh; overflow: hidden;' : ''}
   }
   ${tablesPerPage === 1 ? `
   body > .report-header { flex-shrink: 0; }
-  body > .pc-stretch-wrap { flex: 1 1 auto; display: flex; flex-direction: column; }
-  body > .pc-stretch-wrap .pc-table { flex: 1 1 auto; }
-  body > .pc-stretch-wrap .pc-table tbody { height: 100%; }
+  body > .pc-stretch-wrap { flex: 1 1 auto; display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
+  body > .pc-stretch-wrap .pc-table { flex: 1 1 auto; min-height: 0; }
+  body > .pc-stretch-wrap .pc-table tbody tr { height: auto; }
   body > .summary-bar { flex-shrink: 0; }
   body > .report-footer { flex-shrink: 0; }
   body > .custom-footer { flex-shrink: 0; }
@@ -1248,8 +1248,8 @@ function buildPeriodCountReportHtml(params: {
   /* ── Header ── */
   .report-header {
     text-align: center;
-    padding-bottom: 6px;
-    margin-bottom: 8px;
+    padding-bottom: 3px;
+    margin-bottom: 4px;
     border-bottom: 2px solid #111827;
     position: relative;
   }
@@ -1261,17 +1261,17 @@ function buildPeriodCountReportHtml(params: {
     background: #D4D4D8;
   }
   .school-name {
-    font-size: ${isLandscape ? '17px' : '15px'};
+    font-size: ${isLandscape ? '15px' : '13px'};
     font-weight: 800;
     color: #111827;
     letter-spacing: 0.5px;
     font-family: Georgia, 'Times New Roman', serif;
   }
   .report-title {
-    font-size: ${isLandscape ? '12px' : '11px'};
+    font-size: ${isLandscape ? '11px' : '10px'};
     font-weight: 600;
     color: #374151;
-    margin-top: 2px;
+    margin-top: 1px;
   }
   .report-subtitle {
     font-size: ${headerFontSize};
@@ -1300,6 +1300,7 @@ function buildPeriodCountReportHtml(params: {
     font-size: ${fontSize};
     table-layout: fixed;
     border: 1px solid #111827;
+    height: 100%;
   }
   .pc-table th, .pc-table td {
     border: 0.5px solid #D4D4D8;
@@ -1433,10 +1434,10 @@ function buildPeriodCountReportHtml(params: {
   }
 
   /* ── Summary bar ── */
-  .summary-bar { display: flex; gap: 14px; justify-content: center; margin-top: 8px; flex-wrap: wrap; }
+  .summary-bar { display: flex; gap: 14px; justify-content: center; margin-top: 5px; flex-wrap: wrap; }
   .summary-item {
     text-align: center;
-    padding: 4px 12px;
+    padding: 3px 8px;
     background: #F9FAFB;
     border-radius: 4px;
     border: 1px solid #D4D4D8;
@@ -1444,7 +1445,7 @@ function buildPeriodCountReportHtml(params: {
   }
   .summary-num {
     display: block;
-    font-size: 14px;
+    font-size: 12px;
     font-weight: 800;
     color: #111827;
     font-family: Georgia, serif;
@@ -1458,8 +1459,8 @@ function buildPeriodCountReportHtml(params: {
   }
 
   .report-footer {
-    margin-top: 10px;
-    padding-top: 6px;
+    margin-top: 5px;
+    padding-top: 3px;
     border-top: 1px solid #D4D4D8;
     display: flex;
     justify-content: space-between;
@@ -2160,7 +2161,7 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
   return `
   @page {
     size: A4 ${isLandscape ? 'landscape' : 'portrait'};
-    margin: 10mm 10mm 14mm 10mm;
+    margin: 8mm 8mm 8mm 8mm;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -2169,7 +2170,7 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
   body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     font-size: 10.5px;
-    line-height: 1.45;
+    line-height: 1.3;
     color: #111827;
     background: #fff;
   }
