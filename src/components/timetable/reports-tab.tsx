@@ -2070,9 +2070,13 @@ function groupSlotsIntoPages(slots: string[], sheetsPerPage: number): string {
 /* ---------- Shared professional CSS for timetable grid reports ---------- */
 
 function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string {
-  // Gap between slots: 10px margin-top + 1px border + 10px padding-top = 21px per gap
-  // Total gap budget = (sheetsPerPage - 1) * 21
-  const totalGaps = (sheetsPerPage - 1) * 21;
+  // A4 usable height in px at 96dpi (portrait: 273mm, landscape: 186mm)
+  // Separator per gap = 10px margin + 1px border + 8px padding = 19px
+  const pageHeightMm = isLandscape ? 186 : 273;
+  const totalGapsPx = (sheetsPerPage - 1) * 19;
+  const pageHeightPx = Math.floor(pageHeightMm * 3.7795);
+  const slotHeightPx = Math.floor((pageHeightPx - totalGapsPx) / sheetsPerPage);
+
   const nUpCss = sheetsPerPage > 1 ? `
   body.sheets-multi {
     margin: 0;
@@ -2081,37 +2085,44 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
   body.sheets-multi .page-group {
     display: flex;
     flex-direction: column;
-    height: 100vh;
+    height: ${pageHeightPx}px;
     box-sizing: border-box;
     page-break-after: always;
     break-after: page;
     page-break-inside: avoid;
     break-inside: avoid;
-    padding-bottom: 14px;
+    overflow: hidden;
   }
   body.sheets-multi .page-group:last-child {
     page-break-after: auto;
     break-after: auto;
   }
   body.sheets-multi .page-group .sheet-slot {
-    flex: 1 1 0;
-    min-height: 0;
-    max-height: calc((100vh - 14px - ${totalGaps}px) / ${sheetsPerPage});
+    height: ${slotHeightPx}px;
+    max-height: ${slotHeightPx}px;
+    min-height: ${slotHeightPx}px;
+    flex-shrink: 0;
     page-break-inside: avoid;
     break-inside: avoid;
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    box-sizing: border-box;
+  }
+  body.sheets-multi .page-group .sheet-slot .page-header,
+  body.sheets-multi .page-group .sheet-slot .sheet-label {
+    flex-shrink: 0;
   }
   body.sheets-multi .page-group .sheet-slot table.tt {
     flex: 1 1 0;
     min-height: 0;
-    overflow: hidden;
+    width: 100%;
+    height: 100%;
   }
   body.sheets-multi .page-group .sheet-slot + .sheet-slot {
     margin-top: 10px;
     border-top: 1px solid #D4D4D8;
-    padding-top: 10px;
+    padding-top: 8px;
   }` : '\n  body.sheets-multi .sheet-slot { width: 100%; }';
 
   /* ── Landscape single-sheet: table fills full A4 page ── */
@@ -2172,12 +2183,10 @@ function buildTimetableCss(isLandscape: boolean, sheetsPerPage: number): string 
   body.sheets-multi .page-header .school-name { font-size: 10px; letter-spacing: 0.3px; }
   body.sheets-multi .page-header .report-title { font-size: 9px; margin-top: 0; }
   body.sheets-multi .page-header .report-sub { font-size: 8px; margin-top: 0; }
-  body.sheets-multi .custom-header { font-size: 6px; margin-top: 1px; }
-  body.sheets-multi table.tt { font-size: 6.5px; width: 100%; flex: 1 1 0; height: 100%; }
-  body.sheets-multi table.tt th { font-size: 6px; letter-spacing: 0.4px; padding: 2px 1px; }
+  body.sheets-multi .custom-header { font-size: 6px; margin-top: 1px; flex-shrink: 0; }
+  body.sheets-multi table.tt { font-size: 6.5px; flex: 1 1 0; min-height: 0; }
+  body.sheets-multi table.tt th { font-size: 6px; letter-spacing: 0.4px; }
   body.sheets-multi table.tt td { padding: 1px 1px; }
-  body.sheets-multi table.tt tbody { height: 100%; }
-  body.sheets-multi table.tt tbody tr { height: auto; }
   body.sheets-multi .tp { width: 44px; min-width: 44px; font-size: 6px; }
   body.sheets-multi .pl { font-size: 6px; }
   body.sheets-multi .tt-time { font-size: 5px; }
