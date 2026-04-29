@@ -41,11 +41,14 @@ export interface TimetableActions {
 
   // Assignments
   addAssignment: (teacherId: string, classId: string, sectionId: string, subjectId: string) => void;
+  updateAssignment: (id: string, teacherId: string, classId: string, sectionId: string, subjectId: string) => void;
   deleteAssignment: (id: string) => void;
 
   // Entries
   addEntry: (day: string, period: number, teacherId: string, classId: string, sectionId: string, subjectId: string) => void;
   deleteEntry: (id: string) => void;
+  clearAllEntries: () => void;
+  clearClassSectionEntries: (classId: string, sectionId: string) => void;
 
   // Substitutes
   addSubstitute: (date: string, day: string, entryId: string, originalTeacherId: string, substituteTeacherId: string) => void;
@@ -173,9 +176,34 @@ export const useTimetableStore = create<TimetableStore>()(
       addAssignment: (teacherId, classId, sectionId, subjectId) => set((state) => ({
         assignments: [...state.assignments, { id: generateId(), teacherId, classId, sectionId, subjectId }]
       })),
-      deleteAssignment: (id) => set((state) => ({
-        assignments: state.assignments.filter(a => a.id !== id)
-      })),
+      updateAssignment: (id, teacherId, classId, sectionId, subjectId) => set((state) => {
+        const old = state.assignments.find(a => a.id === id);
+        if (!old) return state;
+        // Remove timetable entries that matched the OLD assignment's teacher+class+section+subject
+        const updatedEntries = state.entries.filter(e =>
+          !(e.classId === old.classId && e.sectionId === old.sectionId &&
+            e.teacherId === old.teacherId && e.subjectId === old.subjectId)
+        );
+        return {
+          assignments: state.assignments.map(a =>
+            a.id === id ? { ...a, teacherId, classId, sectionId, subjectId } : a
+          ),
+          entries: updatedEntries,
+        };
+      }),
+      deleteAssignment: (id) => set((state) => {
+        const assignment = state.assignments.find(a => a.id === id);
+        if (!assignment) return state;
+        // Remove timetable entries that were assigned via this assignment
+        const updatedEntries = state.entries.filter(e =>
+          !(e.classId === assignment.classId && e.sectionId === assignment.sectionId &&
+            e.teacherId === assignment.teacherId && e.subjectId === assignment.subjectId)
+        );
+        return {
+          assignments: state.assignments.filter(a => a.id !== id),
+          entries: updatedEntries,
+        };
+      }),
 
       addEntry: (day, period, teacherId, classId, sectionId, subjectId) => set((state) => {
         const exists = state.entries.some(e => e.day === day && e.period === period && e.classId === classId && e.sectionId === sectionId);
@@ -186,6 +214,10 @@ export const useTimetableStore = create<TimetableStore>()(
       }),
       deleteEntry: (id) => set((state) => ({
         entries: state.entries.filter(e => e.id !== id)
+      })),
+      clearAllEntries: () => set((state) => ({ entries: [] })),
+      clearClassSectionEntries: (classId, sectionId) => set((state) => ({
+        entries: state.entries.filter(e => !(e.classId === classId && e.sectionId === sectionId))
       })),
 
       addSubstitute: (date, day, entryId, originalTeacherId, substituteTeacherId) => set((state) => ({
