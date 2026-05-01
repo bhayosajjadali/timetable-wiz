@@ -343,7 +343,15 @@ function TimetableGrid({ classId, sectionId }: { classId: string; sectionId: str
   const selectAllDays = () => {
     const period = cellAction && (cellAction.type === 'add' || cellAction.type === 'change')
       ? cellAction.period : 0;
-    const freeDays = activeDays.filter((d) => !getEntry(d, period));
+    const freeDays = activeDays.filter((d) => {
+      const existing = entries.find(
+        (e) => e.day === d && e.period === period && e.classId === classId && e.sectionId === sectionId
+      );
+      if (cellAction?.type === 'change') {
+        return !existing || existing.teacherId === cellAction.entry.teacherId;
+      }
+      return !existing;
+    });
     setSelectedDays(freeDays);
   };
 
@@ -356,9 +364,14 @@ function TimetableGrid({ classId, sectionId }: { classId: string; sectionId: str
   const doFill = (days: string[]) => {
     if (!cellAction || cellAction.type === 'menu') return;
 
-    // For "change": delete the existing entry first
+    // For "change": delete existing entries on all selected days
     if (cellAction.type === 'change') {
-      deleteEntry(cellAction.entry.id);
+      for (const day of days) {
+        const existing = entries.find(
+          (e) => e.day === day && e.period === cellAction.period && e.classId === classId && e.sectionId === sectionId
+        );
+        if (existing) deleteEntry(existing.id);
+      }
     }
 
     for (const day of days) {
@@ -669,8 +682,11 @@ function TimetableGrid({ classId, sectionId }: { classId: string; sectionId: str
                 </div>
                 <div className="border rounded-lg p-2 space-y-1 max-h-[180px] overflow-y-auto">
                   {activeDays.map((day) => {
-                    const isCurrentDay = cellAction?.type === 'change' && day === cellAction.day;
-                    const isFilled = !isCurrentDay && !!getEntry(day, dialogPeriod);
+                    const existingEntry = getEntry(day, dialogPeriod);
+                    // For change mode: day is selectable if empty OR if it has the same teacher being replaced
+                    const isFilled = cellAction?.type === 'change'
+                      ? !!existingEntry && existingEntry.teacherId !== cellAction.entry.teacherId
+                      : !!existingEntry;
                     const isChecked = selectedDays.includes(day);
                     return (
                       <label
@@ -691,6 +707,9 @@ function TimetableGrid({ classId, sectionId }: { classId: string; sectionId: str
                         <span className="text-sm">{day}</span>
                         {isFilled && (
                           <span className="text-[10px] text-muted-foreground ml-auto">Already filled</span>
+                        )}
+                        {!isFilled && cellAction?.type === 'change' && existingEntry && (
+                          <span className="text-[10px] text-amber-600 ml-auto">Will replace</span>
                         )}
                       </label>
                     );
