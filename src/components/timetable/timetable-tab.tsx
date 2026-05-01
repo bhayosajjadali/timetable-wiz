@@ -252,6 +252,10 @@ function TimetableGrid({ classId, sectionId }: { classId: string; sectionId: str
 
   const [showClearClassDialog, setShowClearClassDialog] = useState(false);
 
+  // Clash detection state
+  type ClashInfo = { clashingEntries: Entry[]; pendingDays: string[] };
+  const [clashInfo, setClashInfo] = useState<ClashInfo | null>(null);
+
   // Undo state: stores the deleted entry for 5s
   const [undoEntry, setUndoEntry] = useState<Entry | null>(null);
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -349,6 +353,28 @@ function TimetableGrid({ classId, sectionId }: { classId: string; sectionId: str
     }
   };
 
+  const doFill = (days: string[]) => {
+    if (!cellAction || cellAction.type === 'menu') return;
+
+    // For "change": delete the existing entry first
+    if (cellAction.type === 'change') {
+      deleteEntry(cellAction.entry.id);
+    }
+
+    for (const day of days) {
+      addEntry(day, cellAction.period, selectedTeacher, classId, sectionId, selectedSubject);
+    }
+
+    const teacher = getTeacher(selectedTeacher);
+    const subject = getSubject(selectedSubject);
+    const action = cellAction.type === 'change' ? 'updated' : 'added';
+    toast({
+      title: `Entry ${action}`,
+      description: `${teacher?.shortName} - ${subject?.shortName} on ${days.join(', ')}.`,
+    });
+    setCellAction(null);
+  };
+
   const handleFill = () => {
     if (!cellAction || cellAction.type === 'menu') return;
     if (!selectedTeacher || !selectedSubject || selectedDays.length === 0) {
@@ -356,28 +382,40 @@ function TimetableGrid({ classId, sectionId }: { classId: string; sectionId: str
       return;
     }
 
-    // For "change": delete the existing entry first
-    if (cellAction.type === 'change') {
-      deleteEntry(cellAction.entry.id);
+    // Check for clashes: teacher busy in another class-section at same period on selected days
+    const period = cellAction.period;
+    // For change, exclude the current entry being replaced (same day only)
+    const currentEntryId = cellAction.type === 'change' ? cellAction.entry.id : null;
+
+    const clashingEntries = selectedDays
+      .map((day) =>
+        entries.find(
+          (e) =>
+            e.day === day &&
+            e.period === period &&
+            e.teacherId === selectedTeacher &&
+            !(e.classId === classId && e.sectionId === sectionId) &&
+            e.id !== currentEntryId
+        )
+      )
+      .filter(Boolean) as Entry[];
+
+    if (clashingEntries.length > 0) {
+      setClashInfo({ clashingEntries, pendingDays: selectedDays });
+      return;
     }
 
-    let addedCount = 0;
-    const prevLen = entries.length;
+    doFill(selectedDays);
+  };
 
-    for (const day of selectedDays) {
-      addEntry(day, cellAction.period, selectedTeacher, classId, sectionId, selectedSubject);
+  const handleClashConfirm = () => {
+    if (!clashInfo) return;
+    // Remove all clashing entries
+    for (const e of clashInfo.clashingEntries) {
+      deleteEntry(e.id);
     }
-
-    addedCount = entries.length - prevLen + (cellAction.type === 'change' ? 1 : 0);
-
-    const teacher = getTeacher(selectedTeacher);
-    const subject = getSubject(selectedSubject);
-    const action = cellAction.type === 'change' ? 'updated' : 'added';
-    toast({
-      title: `Entry ${action}`,
-      description: `${teacher?.shortName} - ${subject?.shortName} on ${selectedDays.join(', ')}.`,
-    });
-    setCellAction(null);
+    setClashInfo(null);
+    doFill(clashInfo.pendingDays);
   };
 
   const handleClearClass = () => {
@@ -615,8 +653,8 @@ function TimetableGrid({ classId, sectionId }: { classId: string; sectionId: str
               </Select>
             </div>
 
-            {/* Multi-day selector only for Add */}
-            {cellAction?.type === 'add' && (
+            {/* Multi-day selector for Add and Change */}
+            {(cellAction?.type === 'add' || cellAction?.type === 'change') && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label>Assign to Days</Label>
@@ -631,7 +669,8 @@ function TimetableGrid({ classId, sectionId }: { classId: string; sectionId: str
                 </div>
                 <div className="border rounded-lg p-2 space-y-1 max-h-[180px] overflow-y-auto">
                   {activeDays.map((day) => {
-                    const isFilled = !!getEntry(day, dialogPeriod);
+                    const isCurrentDay = cellAction?.type === 'change' && day === cellAction.day;
+                    const isFilled = !isCurrentDay && !!getEntry(day, dialogPeriod);
                     const isChecked = selectedDays.includes(day);
                     return (
                       <label
@@ -659,7 +698,7 @@ function TimetableGrid({ classId, sectionId }: { classId: string; sectionId: str
                 </div>
                 {selectedDays.length > 1 && (
                   <p className="text-xs text-[#34C759] font-medium">
-                    {selectedDays.length} days selected — same period will be assigned to all
+                    {selectedDays.length} days selected — same period will be {cellAction?.type === 'change' ? 'updated' : 'assigned'} on all
                   </p>
                 )}
               </div>
@@ -669,10 +708,10 @@ function TimetableGrid({ classId, sectionId }: { classId: string; sectionId: str
             <Button variant="outline" onClick={() => setCellAction(null)}>Cancel</Button>
             <Button
               onClick={handleFill}
-              disabled={cellAction?.type === 'add' ? selectedDays.length === 0 : false}
+              disabled={selectedDays.length === 0}
             >
               {cellAction?.type === 'change' ? (
-                <><RefreshCw className="h-4 w-4 mr-1.5" />Update</>
+                <><RefreshCw className="h-4 w-4 mr-1.5" />Update {selectedDays.length} Day{selectedDays.length !== 1 ? 's' : ''}</>
               ) : (
                 <><Plus className="h-4 w-4 mr-1.5" />Add to {selectedDays.length} Day{selectedDays.length !== 1 ? 's' : ''}</>
               )}
@@ -680,6 +719,54 @@ function TimetableGrid({ classId, sectionId }: { classId: string; sectionId: str
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── Clash Warning Dialog ── */}
+      <AlertDialog open={!!clashInfo} onOpenChange={(open) => !open && setClashInfo(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-destructive" />
+              Teacher Clash Detected
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm">
+                <p>
+                  <span className="font-semibold">{getTeacher(selectedTeacher)?.name}</span> is already assigned in Period {clashInfo ? getPeriodLabel(cellAction && cellAction.type !== 'menu' ? cellAction.period : 0, timings) : ''} on:
+                </p>
+                <ul className="space-y-1.5">
+                  {clashInfo?.clashingEntries.map((e) => {
+                    const cls = classes.find((c) => c.id === e.classId);
+                    const sec = sections.find((s) => s.id === e.sectionId);
+                    const subj = subjects.find((s) => s.id === e.subjectId);
+                    return (
+                      <li key={e.id} className="flex items-center gap-2 p-2 rounded-md bg-destructive/10 border border-destructive/20">
+                        <AlertCircle className="h-3.5 w-3.5 text-destructive shrink-0" />
+                        <span>
+                          <span className="font-medium">{e.day}</span> — {cls?.name} Section {sec?.name}
+                          {subj ? ` (${subj.shortName})` : ''}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <p className="text-muted-foreground">
+                  To proceed, the teacher must be removed from the above slot(s) first. Do you want to remove them and continue?
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setClashInfo(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleClashConfirm}
+            >
+              <Trash2 className="h-4 w-4 mr-1.5" />
+              Remove &amp; Assign
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* ── Clear Class Dialog ── */}
       <AlertDialog open={showClearClassDialog} onOpenChange={setShowClearClassDialog}>
