@@ -417,17 +417,7 @@ function TimetableGrid({ classId, sectionId }: { classId: string; sectionId: str
               </CardTitle>
               <CardDescription>{activeDays.length} days, {timings.periodsPerDay} periods/day</CardDescription>
             </div>
-            {classEntries.length > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-destructive border-destructive/30 hover:bg-destructive/10 shrink-0"
-                onClick={() => setShowClearClassDialog(true)}
-              >
-                <XCircle className="h-4 w-4 mr-1.5" />
-                Clear Class
-              </Button>
-            )}
+
           </div>
         </CardHeader>
         <CardContent>
