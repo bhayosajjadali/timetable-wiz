@@ -120,7 +120,7 @@ function buildSubstituteReportHtml(
   }[],
   store: ReturnType<typeof useTimetableStore.getState>
 ): string {
-  const { entries, teachers, subjects, classes, sections } = store;
+  const { entries, teachers, subjects, classes, sections, timings } = store;
 
   const getTeacher = (id: string) => teachers.find((t) => t.id === id);
   const getSubject = (id: string) => subjects.find((s) => s.id === id);
@@ -136,15 +136,17 @@ function buildSubstituteReportHtml(
       const subject = entry ? getSubject(entry.subjectId) : null;
       const cls = entry ? getClass(entry.classId) : null;
       const sec = entry ? getSection(entry.sectionId) : null;
+      const isKeepEmpty = sub.substituteTeacherId === '__KEEP_EMPTY__';
 
       return {
         period: entry?.period || 0,
-        periodLabel: String(entry?.period || '?'),
+        periodLabel: entry ? getPeriodLabel(entry.period, timings) : '?',
         originalTeacher: originalTeacher?.name || '?',
-        subTeacher: subTeacher?.name || '?',
+        subTeacher: isKeepEmpty ? '\u2014' : (subTeacher?.name || '?'),
         subTeacherId: sub.substituteTeacherId,
         subject: subject?.shortName || '?',
         classSection: `${cls?.name || '?'}-${sec?.name || '?'}`,
+        isKeepEmpty,
       };
     })
     .sort((a, b) => a.period - b.period);
@@ -157,7 +159,7 @@ function buildSubstituteReportHtml(
       <td style="text-align:center;font-weight:600;width:90px;">${esc(date)}</td>
       <td style="text-align:center;font-weight:500;">${esc(row.originalTeacher)}</td>
       <td style="text-align:center;font-weight:600;width:60px;">${row.periodLabel}</td>
-      <td style="text-align:center;font-weight:500;">${esc(row.subTeacher)}</td>
+      <td style="text-align:center;font-weight:500;${row.isKeepEmpty ? 'color:#999;font-style:italic;' : ''}">${esc(row.subTeacher)}</td>
       <td style="width:160px;height:48px;vertical-align:bottom;padding-bottom:6px;">
         <div style="border-bottom:1px solid #999;width:85%;margin:0 auto;"></div>
       </td>
@@ -347,6 +349,8 @@ export function SubstitutesTab() {
       }
     >();
     daySubstitutes.forEach((sub) => {
+      // Skip keep-empty entries — they don't occupy a real teacher
+      if (sub.substituteTeacherId === '__KEEP_EMPTY__') return;
       const entry = entries.find((e) => e.id === sub.entryId);
       const origTeacher = teachers.find((t) => t.id === sub.originalTeacherId);
       if (entry && origTeacher) {
@@ -510,7 +514,7 @@ export function SubstitutesTab() {
     const subTeacher = getTeacher(reassignDialog.subTeacherId);
     toast({
       title: 'Teacher reassigned',
-      description: `${subTeacher?.name || 'Teacher'} moved from Period ${reassignDialog.oldPeriod} to new assignment.`,
+      description: `${subTeacher?.name || 'Teacher'} moved from ${getPeriodLabel(reassignDialog.oldPeriod, timings)} to new assignment.`,
     });
 
     setReassignDialog(null);
@@ -525,6 +529,22 @@ export function SubstitutesTab() {
       toast({ title: 'Substitute removed', description: 'The assignment has been cancelled.' });
     },
     [deleteSubstitute, toast]
+  );
+
+  // Handle keeping a period intentionally empty (no substitute)
+  const handleKeepEmpty = useCallback(
+    (entryId: string) => {
+      const entry = entries.find((e) => e.id === entryId);
+      if (!entry) return;
+      addSubstitute(selectedDate, dayOfWeek, entryId, entry.teacherId, '__KEEP_EMPTY__');
+      toast({
+        title: 'Period kept empty',
+        description: 'No substitute will be assigned for this period.',
+      });
+      setActiveSubPopover(null);
+      setSubSearchQuery('');
+    },
+    [entries, dayOfWeek, addSubstitute, selectedDate, toast]
   );
 
   // Download substitute report
@@ -593,26 +613,42 @@ export function SubstitutesTab() {
           <CardDescription>Select date and mark absent teachers to arrange substitutes</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex flex-wrap items-end gap-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="subDate" className="text-xs font-medium">Date</Label>
-              <div className="flex items-center gap-3">
-                <Input
-                  id="subDate"
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => {
-                    setSelectedDate(e.target.value);
-                    setAbsentTeacherIds([]);
-                  }}
-                  className="max-w-[200px]"
-                />
-                <Badge variant={timings.days.includes(dayOfWeek) ? 'default' : 'destructive'}>
-                  {dayOfWeek}
-                  {!timings.days.includes(dayOfWeek) && ' (Off Day)'}
-                </Badge>
+          <div className="flex flex-wrap items-end gap-4 justify-between">
+            <div className="flex flex-wrap items-end gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="subDate" className="text-xs font-medium">Date</Label>
+                <div className="flex items-center gap-3">
+                  <Input
+                    id="subDate"
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => {
+                      setSelectedDate(e.target.value);
+                      setAbsentTeacherIds([]);
+                    }}
+                    className="max-w-[200px]"
+                  />
+                  <Badge variant={timings.days.includes(dayOfWeek) ? 'default' : 'destructive'}>
+                    {dayOfWeek}
+                    {!timings.days.includes(dayOfWeek) && ' (Off Day)'}
+                  </Badge>
+                </div>
               </div>
             </div>
+            {/* Print button always visible at top when there are substitutes */}
+            <Button
+              onClick={handleDownloadReport}
+              disabled={isGenerating || daySubstitutes.length === 0}
+              size="sm"
+              className="gap-1.5 shrink-0"
+            >
+              {isGenerating ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Printer className="h-4 w-4" />
+              )}
+              Print Report
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -883,8 +919,17 @@ export function SubstitutesTab() {
 
                               {/* Right: Substitute assignment */}
                               <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                                {isSubbed && subTeacher ? (
+                                {isSubbed ? (
                                   <>
+                                    {sub?.substituteTeacherId === '__KEEP_EMPTY__' ? (
+                                      <Badge
+                                        variant="outline"
+                                        className="text-xs bg-gray-100 text-gray-500 border-gray-300 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-600 gap-1"
+                                      >
+                                        <UserX className="h-3 w-3" />
+                                        Kept Empty
+                                      </Badge>
+                                    ) : subTeacher ? (
                                     <Badge
                                       variant="outline"
                                       className="text-xs bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700 gap-1"
@@ -892,6 +937,7 @@ export function SubstitutesTab() {
                                       <UserCheck className="h-3 w-3" />
                                       {subTeacher.shortName}
                                     </Badge>
+                                    ) : null}
                                     {/* Change button - opens popover */}
                                     <Popover
                                       open={activeSubPopover === entry.id}
@@ -912,6 +958,7 @@ export function SubstitutesTab() {
                                           searchQuery={subSearchQuery}
                                           onSearchChange={setSubSearchQuery}
                                           onAssign={handleAssignSubstitute}
+                                          onKeepEmpty={handleKeepEmpty}
                                           onReassignRequest={(opt) => {
                                             setReassignDialog({
                                               open: true,
@@ -963,6 +1010,7 @@ export function SubstitutesTab() {
                                         searchQuery={subSearchQuery}
                                         onSearchChange={setSubSearchQuery}
                                         onAssign={handleAssignSubstitute}
+                                        onKeepEmpty={handleKeepEmpty}
                                         onReassignRequest={(opt) => {
                                           setReassignDialog({
                                             open: true,
@@ -1051,7 +1099,8 @@ export function SubstitutesTab() {
                     period: entry?.period || 0,
                     periodLabel: getPeriodLabel(entry?.period || 0, timings),
                     origName: origTeacher?.shortName || '?',
-                    subName: subTeacher?.shortName || '?',
+                    subName: sub.substituteTeacherId === '__KEEP_EMPTY__' ? '\u2014' : (subTeacher?.shortName || '?'),
+                    isKeepEmpty: sub.substituteTeacherId === '__KEEP_EMPTY__',
                     subjectName: subject?.shortName || '?',
                     classSection: `${cls?.name || '?'}-${sec?.name || '?'}`,
                   };
@@ -1068,7 +1117,11 @@ export function SubstitutesTab() {
                       </Badge>
                       <span className="text-muted-foreground line-through">{row.origName}</span>
                       <ArrowRightLeft className="h-3 w-3 text-muted-foreground" />
-                      <span className="font-medium text-green-700 dark:text-green-400">{row.subName}</span>
+                      {row.isKeepEmpty ? (
+                        <span className="text-muted-foreground italic">Kept Empty</span>
+                      ) : (
+                        <span className="font-medium text-green-700 dark:text-green-400">{row.subName}</span>
+                      )}
                       <span className="text-muted-foreground">
                         {row.subjectName} | {row.classSection}
                       </span>
@@ -1103,7 +1156,7 @@ export function SubstitutesTab() {
               <div className="space-y-2 text-sm">
                 <p>
                   <span className="font-medium">{getTeacher(reassignDialog?.subTeacherId || '')?.name}</span> is currently
-                  assigned for <span className="font-medium">Period {reassignDialog?.oldPeriod}</span> (replacing{' '}
+                  assigned for <span className="font-medium">{reassignDialog?.oldPeriod != null ? getPeriodLabel(reassignDialog.oldPeriod, timings) : '?'}</span> (replacing{' '}
                   <span className="font-medium">{reassignDialog?.oldOriginalTeacher}</span>).
                 </p>
                 <p>
@@ -1113,7 +1166,7 @@ export function SubstitutesTab() {
                 <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800 mt-2">
                   <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
                   <span className="text-xs text-amber-700 dark:text-amber-300">
-                    Period {reassignDialog?.oldPeriod} will become unassigned after this action. You will need to
+                    {reassignDialog?.oldPeriod != null ? getPeriodLabel(reassignDialog.oldPeriod, timings) : '?'} will become unassigned after this action. You will need to
                     assign a different substitute for that period.
                   </span>
                 </div>
@@ -1148,6 +1201,7 @@ function SubstitutePickerContent({
   searchQuery,
   onSearchChange,
   onAssign,
+  onKeepEmpty,
   onReassignRequest,
   currentSubId,
   timings,
@@ -1157,6 +1211,7 @@ function SubstitutePickerContent({
   searchQuery: string;
   onSearchChange: (q: string) => void;
   onAssign: (entryId: string, subTeacherId: string) => void;
+  onKeepEmpty: (entryId: string) => void;
   onReassignRequest: (opt: SubOption) => void;
   currentSubId?: string;
   timings: { days: string[] } & Record<string, unknown>;
@@ -1182,6 +1237,21 @@ function SubstitutePickerContent({
           onChange={(e) => onSearchChange(e.target.value)}
           className="h-8 text-sm"
         />
+      </div>
+      {/* Keep Empty option */}
+      <div className="border-b">
+        <button
+          onClick={() => onKeepEmpty(entry.id)}
+          className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-muted transition-colors text-left cursor-pointer"
+        >
+          <div className="w-6 h-6 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">
+            <UserX className="h-3 w-3 text-gray-500 dark:text-gray-400" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="font-medium text-xs text-gray-600 dark:text-gray-300">Keep Empty</div>
+            <div className="text-[10px] text-muted-foreground">No substitute for this period</div>
+          </div>
+        </button>
       </div>
       <div className="max-h-56 overflow-y-auto p-1">
         {options.length === 0 ? (
@@ -1236,7 +1306,7 @@ function SubstitutePickerContent({
                           variant="outline"
                           className="text-[9px] px-1.5 py-0 h-4 text-amber-600 border-amber-300 bg-amber-50 dark:text-amber-400 dark:border-amber-700 dark:bg-amber-900/30"
                         >
-                          Period {opt.assignedPeriod}
+                          {opt.assignedPeriod != null ? getPeriodLabel(opt.assignedPeriod, timings) : '?'}
                         </Badge>
                       </div>
                       <div className="text-[10px] text-amber-600 dark:text-amber-400">
