@@ -164,23 +164,6 @@ function buildSubstituteReportHtml(
     </tr>`;
   });
 
-  // Pad with blank rows so the table fills the page nicely
-  const minRows = 14;
-  let blankRows = '';
-  for (let i = rows.length; i < minRows; i++) {
-    const bg = i % 2 === 0 ? '#FFFFFF' : '#F8F9FA';
-    blankRows += `<tr style="background:${bg};">
-      <td style="height:38px;">&nbsp;</td>
-      <td>&nbsp;</td>
-      <td>&nbsp;</td>
-      <td>&nbsp;</td>
-      <td style="width:160px;">
-        <div style="border-bottom:1px solid #ddd;width:85%;margin:0 auto;"></div>
-      </td>
-      <td>&nbsp;</td>
-    </tr>`;
-  }
-
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -217,6 +200,8 @@ function buildSubstituteReportHtml(
   }
   .report-table th:first-child { border-radius: 5px 0 0 0; }
   .report-table th:last-child { border-radius: 0 5px 0 0; }
+  .report-table tr:last-child td:first-child { border-radius: 0 0 0 5px; }
+  .report-table tr:last-child td:last-child { border-radius: 0 0 5px 0; }
   .report-table td {
     padding: 4px 6px;
     text-align: center;
@@ -226,7 +211,7 @@ function buildSubstituteReportHtml(
   }
 
   .headmaster-section {
-    margin-top: 36px;
+    margin-top: 24px;
     display: flex;
     justify-content: flex-end;
   }
@@ -260,7 +245,6 @@ function buildSubstituteReportHtml(
     </thead>
     <tbody>
       ${tableRows}
-      ${blankRows}
     </tbody>
   </table>
 
@@ -409,8 +393,18 @@ export function SubstitutesTab() {
           .map((e) => e.teacherId)
       );
 
+      // Teachers already assigned as substitute for THIS SAME period (for any absent teacher)
+      const periodBusySubIds = new Set<string>();
+      daySubstitutes.forEach((sub) => {
+        if (sub.substituteTeacherId === '__KEEP_EMPTY__') return;
+        const entry = entries.find((e) => e.id === sub.entryId);
+        if (entry && entry.period === entryPeriod) {
+          periodBusySubIds.add(sub.substituteTeacherId);
+        }
+      });
+
       return teachers
-        .filter((t) => !busyTeacherIds.has(t.id) && t.id !== absentTeacherId)
+        .filter((t) => !busyTeacherIds.has(t.id) && t.id !== absentTeacherId && !periodBusySubIds.has(t.id))
         .map((t) => {
           const existingAssignments = substituteAssignmentMap.get(t.id);
           return {
@@ -422,7 +416,7 @@ export function SubstitutesTab() {
         })
         .sort((a, b) => a.teacher.name.localeCompare(b.teacher.name));
     },
-    [entries, dayOfWeek, teachers, substituteAssignmentMap]
+    [entries, dayOfWeek, teachers, substituteAssignmentMap, daySubstitutes]
   );
 
   // Toggle absent teacher selection
