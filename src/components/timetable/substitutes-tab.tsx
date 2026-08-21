@@ -149,57 +149,38 @@ function buildSubstituteReportHtml(
     })
     .sort((a, b) => a.period - b.period);
 
-  // Build table rows
+  // Build table rows with signature column
   let tableRows = '';
   rows.forEach((row, idx) => {
-    const rowBg = idx % 2 === 0 ? 'background:#FFFFFF;' : 'background:#F8F9FA;';
-    tableRows += `<tr style="${rowBg}">
-      <td style="text-align:center;font-weight:600;">${row.periodLabel}</td>
-      <td>${esc(row.originalTeacher)}</td>
-      <td>${esc(row.subTeacher)}</td>
-      <td>${esc(row.subject)}</td>
-      <td>${esc(row.classSection)}</td>
+    const rowBg = idx % 2 === 0 ? '#FFFFFF' : '#F8F9FA';
+    tableRows += `<tr style="background:${rowBg};">
+      <td style="text-align:center;font-weight:600;width:90px;">${esc(date)}</td>
+      <td style="text-align:center;font-weight:500;">${esc(row.originalTeacher)}</td>
+      <td style="text-align:center;font-weight:600;width:60px;">${row.periodLabel}</td>
+      <td style="text-align:center;font-weight:500;">${esc(row.subTeacher)}</td>
+      <td style="width:160px;height:48px;vertical-align:bottom;padding-bottom:6px;">
+        <div style="border-bottom:1px solid #999;width:85%;margin:0 auto;"></div>
+      </td>
+      <td style="width:100px;"></td>
     </tr>`;
   });
 
-  // Group substitutes by teacher for signature section
-  const subTeacherMap = new Map<string, { name: string; assignments: string[] }>();
-  rows.forEach((row) => {
-    const existing = subTeacherMap.get(row.subTeacherId);
-    const assignment = `Period ${row.periodLabel} (${row.subject}, ${row.classSection})`;
-    if (existing) {
-      existing.assignments.push(assignment);
-    } else {
-      subTeacherMap.set(row.subTeacherId, { name: row.subTeacher, assignments: [assignment] });
-    }
-  });
-
-  // Build signature blocks
-  let signatureBlocks = '';
-  let sigIndex = 1;
-  subTeacherMap.forEach((info) => {
-    const assignmentsList = info.assignments
-      .map((a) => `<li style="margin-left:16px;">${esc(a)}</li>`)
-      .join('');
-
-    signatureBlocks += `
-    <div style="margin-bottom:18px;page-break-inside:avoid;">
-      <div style="font-weight:600;font-size:11px;color:#1B2A4A;margin-bottom:2px;">${sigIndex}. ${esc(info.name)}</div>
-      <div style="font-size:9px;color:#555;margin-bottom:8px;">Assigned for:</div>
-      <ul style="font-size:9px;color:#444;margin:0 0 10px 0;padding:0;list-style:disc;">${assignmentsList}</ul>
-      <div style="display:flex;align-items:center;gap:20px;">
-        <div style="flex:1;">
-          <div style="font-size:8px;color:#888;margin-bottom:2px;">Signature:</div>
-          <div style="border-bottom:1px solid #333;width:100%;height:24px;"></div>
-        </div>
-        <div style="width:140px;">
-          <div style="font-size:8px;color:#888;margin-bottom:2px;">Date:</div>
-          <div style="border-bottom:1px solid #333;width:100%;height:24px;"></div>
-        </div>
-      </div>
-    </div>`;
-    sigIndex++;
-  });
+  // Pad with blank rows so the table fills the page nicely
+  const minRows = 14;
+  let blankRows = '';
+  for (let i = rows.length; i < minRows; i++) {
+    const bg = i % 2 === 0 ? '#FFFFFF' : '#F8F9FA';
+    blankRows += `<tr style="background:${bg};">
+      <td style="height:38px;">&nbsp;</td>
+      <td>&nbsp;</td>
+      <td>&nbsp;</td>
+      <td>&nbsp;</td>
+      <td style="width:160px;">
+        <div style="border-bottom:1px solid #ddd;width:85%;margin:0 auto;"></div>
+      </td>
+      <td>&nbsp;</td>
+    </tr>`;
+  }
 
   return `<!DOCTYPE html>
 <html>
@@ -208,62 +189,52 @@ function buildSubstituteReportHtml(
 <style>
   @page {
     size: A4 portrait;
-    margin: 12mm 15mm 15mm 15mm;
+    margin: 10mm 12mm 10mm 12mm;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; font-size: 11px; color: #1D1D1F; background: #fff; }
 
-  .report-header { text-align: center; padding-bottom: 6px; margin-bottom: 10px; border-bottom: 2px solid #1B2A4A; }
-  .school-name { font-size: 22px; font-weight: 700; color: #1B2A4A; letter-spacing: -0.3px; }
-  .report-title { font-size: 13px; font-weight: 600; color: #333; margin-top: 3px; }
-  .report-subtitle { font-size: 11px; color: #666; margin-top: 1px; }
+  .report-header {
+    text-align: center;
+    padding-bottom: 6px;
+    margin-bottom: 8px;
+    border-bottom: 2px solid #1B2A4A;
+  }
+  .school-name { font-size: 20px; font-weight: 700; color: #1B2A4A; letter-spacing: -0.2px; }
+  .report-subtitle { font-size: 12px; font-weight: 600; color: #333; margin-top: 2px; }
+  .report-day { font-size: 10px; color: #666; margin-top: 1px; }
 
-  .summary-row { display: flex; gap: 16px; justify-content: center; margin: 14px 0; }
-  .summary-stat { text-align: center; padding: 6px 18px; background: #F8F9FA; border-radius: 6px; border: 1px solid #DEE2E6; }
-  .stat-num { display: block; font-size: 18px; font-weight: 700; color: #1B2A4A; }
-  .stat-label { display: block; font-size: 8px; color: #86868B; margin-top: 1px; }
-
-  .report-table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+  .report-table { width: 100%; border-collapse: collapse; margin-top: 2px; }
   .report-table th {
     background: #1B2A4A;
     color: #fff;
-    padding: 7px 10px;
+    padding: 6px 6px;
     text-align: center;
     font-weight: 600;
-    font-size: 10px;
+    font-size: 9.5px;
     border: 1px solid #1B2A4A;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
   }
   .report-table th:first-child { border-radius: 5px 0 0 0; }
   .report-table th:last-child { border-radius: 0 5px 0 0; }
   .report-table td {
-    padding: 5px 10px;
+    padding: 4px 6px;
     text-align: center;
     font-size: 10px;
-    border: 1px solid #E5E5EA;
+    border: 1px solid #DEE2E6;
+    vertical-align: middle;
   }
 
-  .signatures-section {
-    margin-top: 24px;
-    padding-top: 12px;
-    border-top: 2px solid #1B2A4A;
-  }
-  .signatures-title {
-    font-size: 13px;
-    font-weight: 700;
-    color: #1B2A4A;
-    margin-bottom: 14px;
-    text-align: center;
-  }
-
-  .principal-section {
-    margin-top: 30px;
-    padding-top: 12px;
-    border-top: 1px solid #DEE2E6;
+  .headmaster-section {
+    margin-top: 36px;
     display: flex;
-    align-items:flex-end;
-    gap: 20px;
+    justify-content: flex-end;
   }
-  .principal-section .sig-label { font-size: 9px; color: #555; margin-bottom: 2px; font-weight: 600; }
+  .headmaster-block { text-align: center; width: 200px; }
+  .headmaster-label { font-size: 10px; font-weight: 600; color: #333; margin-bottom: 4px; }
+  .headmaster-line { border-bottom: 1.5px solid #333; width: 100%; height: 28px; }
+  .headmaster-title { font-size: 9px; color: #666; margin-top: 3px; }
 
   @media print {
     body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -273,53 +244,32 @@ function buildSubstituteReportHtml(
 <body>
   <div class="report-header">
     <div class="school-name">${esc(schoolName)}</div>
-    <div class="report-title">Substitute Teachers for ${esc(date)}</div>
-    <div class="report-subtitle">${esc(dayOfWeek)}</div>
-  </div>
-
-  <div class="summary-row">
-    <div class="summary-stat">
-      <span class="stat-num">${substitutes.length}</span>
-      <span class="stat-label">Substitutions</span>
-    </div>
-    <div class="summary-stat">
-      <span class="stat-num">${new Set(substitutes.map((s) => s.substituteTeacherId)).size}</span>
-      <span class="stat-label">Substitute Teachers</span>
-    </div>
-    <div class="summary-stat">
-      <span class="stat-num">${new Set(substitutes.map((s) => s.originalTeacherId)).size}</span>
-      <span class="stat-label">Absent Teachers</span>
-    </div>
+    <div class="report-subtitle">Substitute Teachers for ${esc(date)}</div>
+    <div class="report-day">${esc(dayOfWeek)}</div>
   </div>
 
   <table class="report-table">
     <thead>
       <tr>
-        <th>Period</th>
+        <th>Date</th>
         <th>Absent Teacher</th>
-        <th>Substitute Teacher</th>
-        <th>Subject</th>
-        <th>Class-Section</th>
+        <th>Period</th>
+        <th>Assigned Teacher</th>
+        <th style="width:160px;">Signature</th>
+        <th style="width:100px;">Remarks</th>
       </tr>
     </thead>
     <tbody>
       ${tableRows}
+      ${blankRows}
     </tbody>
   </table>
 
-  <div class="signatures-section">
-    <div class="signatures-title">Signatures of Substitute Teachers</div>
-    ${signatureBlocks}
-  </div>
-
-  <div class="principal-section">
-    <div style="flex:1;">
-      <div class="sig-label">Principal Signature:</div>
-      <div style="border-bottom:1px solid #333;width:100%;height:28px;"></div>
-    </div>
-    <div style="width:160px;">
-      <div class="sig-label">Date:</div>
-      <div style="border-bottom:1px solid #333;width:100%;height:28px;"></div>
+  <div class="headmaster-section">
+    <div class="headmaster-block">
+      <div class="headmaster-label">Headmaster</div>
+      <div class="headmaster-line"></div>
+      <div class="headmaster-title">Signature &amp; Stamp</div>
     </div>
   </div>
 </body>
