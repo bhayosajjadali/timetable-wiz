@@ -36,13 +36,11 @@ import {
   Plus,
   CalendarDays,
   AlertCircle,
-  Download,
   Loader2,
   Users,
   CheckCircle2,
   X,
   AlertTriangle,
-  RotateCcw,
   ChevronDown,
   Pencil,
   Printer,
@@ -100,9 +98,8 @@ function esc(str: string): string {
 interface SubOption {
   teacher: { id: string; name: string; shortName: string };
   isAlreadyAssigned: boolean;
-  assignedPeriod?: number;
-  assignedSubId?: string;
-  assignedOriginalTeacher?: string;
+  assignedPeriods: number[];
+  assignedOriginalTeachers: string[];
 }
 
 /* ====================================================================
@@ -311,15 +308,14 @@ export function SubstitutesTab() {
   const [activeSubPopover, setActiveSubPopover] = useState<string | null>(null);
   const [subSearchQuery, setSubSearchQuery] = useState('');
 
-  // Reassign confirmation dialog
-  const [reassignDialog, setReassignDialog] = useState<{
+  // Confirm assignment dialog (shown when teacher is already assigned to another period)
+  const [confirmAssignDialog, setConfirmAssignDialog] = useState<{
     open: boolean;
+    entryId: string;
     subTeacherId: string;
-    oldSubId: string;
-    newEntryId: string;
-    oldPeriod: number;
-    oldOriginalTeacher: string;
-    newOriginalTeacher: string;
+    subTeacherName: string;
+    assignedPeriodLabels: string[];
+    assignedOriginalTeachers: string[];
   } | null>(null);
 
   const dayOfWeek = getDayOfWeek(selectedDate);
@@ -336,7 +332,7 @@ export function SubstitutesTab() {
     [substitutes, selectedDate]
   );
 
-  // Map: substituteTeacherId -> their substitute record info
+  // Map: substituteTeacherId -> array of their substitute record infos (one teacher can cover multiple periods)
   const substituteAssignmentMap = useMemo(() => {
     const map = new Map<
       string,
@@ -346,7 +342,7 @@ export function SubstitutesTab() {
         period: number;
         originalTeacherId: string;
         originalTeacherName: string;
-      }
+      }[]
     >();
     daySubstitutes.forEach((sub) => {
       // Skip keep-empty entries — they don't occupy a real teacher
@@ -354,13 +350,15 @@ export function SubstitutesTab() {
       const entry = entries.find((e) => e.id === sub.entryId);
       const origTeacher = teachers.find((t) => t.id === sub.originalTeacherId);
       if (entry && origTeacher) {
-        map.set(sub.substituteTeacherId, {
+        const existing = map.get(sub.substituteTeacherId) || [];
+        existing.push({
           subId: sub.id,
           entryId: sub.entryId,
           period: entry.period,
           originalTeacherId: sub.originalTeacherId,
           originalTeacherName: origTeacher.name,
         });
+        map.set(sub.substituteTeacherId, existing);
       }
     });
     return map;
@@ -414,24 +412,15 @@ export function SubstitutesTab() {
       return teachers
         .filter((t) => !busyTeacherIds.has(t.id) && t.id !== absentTeacherId)
         .map((t) => {
-          const existing = substituteAssignmentMap.get(t.id);
-          // If this teacher is already assigned to THIS specific entry, don't show them
-          if (existing && existing.entryId === currentEntryId) return null;
+          const existingAssignments = substituteAssignmentMap.get(t.id);
           return {
             teacher: t,
-            isAlreadyAssigned: !!existing,
-            assignedPeriod: existing?.period,
-            assignedSubId: existing?.subId,
-            assignedOriginalTeacher: existing?.originalTeacherName,
+            isAlreadyAssigned: !!existingAssignments && existingAssignments.length > 0,
+            assignedPeriods: existingAssignments?.map((a) => a.period) || [],
+            assignedOriginalTeachers: existingAssignments?.map((a) => a.originalTeacherName) || [],
           };
         })
-        .filter((opt): opt is SubOption => opt !== null)
-        .sort((a, b) => {
-          // Put non-assigned teachers first
-          if (a.isAlreadyAssigned && !b.isAlreadyAssigned) return 1;
-          if (!a.isAlreadyAssigned && b.isAlreadyAssigned) return -1;
-          return a.teacher.name.localeCompare(b.teacher.name);
-        });
+        .sort((a, b) => a.teacher.name.localeCompare(b.teacher.name));
     },
     [entries, dayOfWeek, teachers, substituteAssignmentMap]
   );
@@ -492,37 +481,26 @@ export function SubstitutesTab() {
     [entries, dayOfWeek, addSubstitute, selectedDate, getTeacher, toast]
   );
 
-  // Handle remove & reassign
-  const handleReassign = useCallback(() => {
-    if (!reassignDialog) return;
-
-    // Remove old assignment
-    deleteSubstitute(reassignDialog.oldSubId);
-
-    // Add new assignment
-    const entry = entries.find((e) => e.id === reassignDialog.newEntryId);
-    if (entry) {
-      addSubstitute(
-        selectedDate,
-        dayOfWeek,
-        reassignDialog.newEntryId,
-        entry.teacherId,
-        reassignDialog.subTeacherId
-      );
-    }
-
-    const subTeacher = getTeacher(reassignDialog.subTeacherId);
+  // Handle confirmed assignment (after user acknowledges teacher is already assigned)
+  const handleConfirmAssign = useCallback(() => {
+    if (!confirmAssignDialog) return;
+    addSubstitute(
+      selectedDate,
+      dayOfWeek,
+      confirmAssignDialog.entryId,
+      entries.find((e) => e.id === confirmAssignDialog.entryId)?.teacherId || '',
+      confirmAssignDialog.subTeacherId
+    );
     toast({
-      title: 'Teacher reassigned',
-      description: `${subTeacher?.name || 'Teacher'} moved from ${getPeriodLabel(reassignDialog.oldPeriod, timings)} to new assignment.`,
+      title: 'Substitute assigned',
+      description: `${confirmAssignDialog.subTeacherName} assigned successfully.`,
     });
-
-    setReassignDialog(null);
+    setConfirmAssignDialog(null);
     setActiveSubPopover(null);
     setSubSearchQuery('');
-  }, [reassignDialog, deleteSubstitute, entries, addSubstitute, selectedDate, dayOfWeek, getTeacher, toast]);
+  }, [confirmAssignDialog, addSubstitute, selectedDate, dayOfWeek, entries, toast]);
 
-  // Handle removing a single substitute assignment
+  // Handle keeping a period intentionally empty (no substitute)
   const handleRemoveSubstitute = useCallback(
     (subId: string) => {
       deleteSubstitute(subId);
@@ -957,19 +935,21 @@ export function SubstitutesTab() {
                                           options={filteredOptions}
                                           searchQuery={subSearchQuery}
                                           onSearchChange={setSubSearchQuery}
-                                          onAssign={handleAssignSubstitute}
-                                          onKeepEmpty={handleKeepEmpty}
-                                          onReassignRequest={(opt) => {
-                                            setReassignDialog({
-                                              open: true,
-                                              subTeacherId: opt.teacher.id,
-                                              oldSubId: opt.assignedSubId!,
-                                              newEntryId: entry.id,
-                                              oldPeriod: opt.assignedPeriod!,
-                                              oldOriginalTeacher: opt.assignedOriginalTeacher!,
-                                              newOriginalTeacher: teacher.name,
-                                            });
+                                          onAssignWithCheck={(entryId, opt) => {
+                                            if (opt.isAlreadyAssigned) {
+                                              setConfirmAssignDialog({
+                                                open: true,
+                                                entryId,
+                                                subTeacherId: opt.teacher.id,
+                                                subTeacherName: opt.teacher.name,
+                                                assignedPeriodLabels: opt.assignedPeriods.map((p) => getPeriodLabel(p, timings)),
+                                                assignedOriginalTeachers: opt.assignedOriginalTeachers,
+                                              });
+                                            } else {
+                                              handleAssignSubstitute(entryId, opt.teacher.id);
+                                            }
                                           }}
+                                          onKeepEmpty={handleKeepEmpty}
                                           currentSubId={sub.id}
                                           timings={timings}
                                         />
@@ -1009,19 +989,21 @@ export function SubstitutesTab() {
                                         options={filteredOptions}
                                         searchQuery={subSearchQuery}
                                         onSearchChange={setSubSearchQuery}
-                                        onAssign={handleAssignSubstitute}
-                                        onKeepEmpty={handleKeepEmpty}
-                                        onReassignRequest={(opt) => {
-                                          setReassignDialog({
-                                            open: true,
-                                            subTeacherId: opt.teacher.id,
-                                            oldSubId: opt.assignedSubId!,
-                                            newEntryId: entry.id,
-                                            oldPeriod: opt.assignedPeriod!,
-                                            oldOriginalTeacher: opt.assignedOriginalTeacher!,
-                                            newOriginalTeacher: teacher.name,
-                                          });
+                                        onAssignWithCheck={(entryId, opt) => {
+                                          if (opt.isAlreadyAssigned) {
+                                            setConfirmAssignDialog({
+                                              open: true,
+                                              entryId,
+                                              subTeacherId: opt.teacher.id,
+                                              subTeacherName: opt.teacher.name,
+                                              assignedPeriodLabels: opt.assignedPeriods.map((p) => getPeriodLabel(p, timings)),
+                                              assignedOriginalTeachers: opt.assignedOriginalTeachers,
+                                            });
+                                          } else {
+                                            handleAssignSubstitute(entryId, opt.teacher.id);
+                                          }
                                         }}
+                                        onKeepEmpty={handleKeepEmpty}
                                         timings={timings}
                                       />
                                     </PopoverContent>
@@ -1141,48 +1123,41 @@ export function SubstitutesTab() {
         </Card>
       )}
 
-      {/* ──────── Reassign Confirmation Dialog ──────── */}
+      {/* ──────── Confirm Assignment Dialog (teacher already assigned elsewhere) ──────── */}
       <Dialog
-        open={!!reassignDialog?.open}
-        onOpenChange={(open) => !open && setReassignDialog(null)}
+        open={!!confirmAssignDialog?.open}
+        onOpenChange={(open) => !open && setConfirmAssignDialog(null)}
       >
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <RotateCcw className="h-5 w-5 text-amber-500" />
-              Reassign Substitute Teacher
+              <AlertCircle className="h-5 w-5 text-blue-500" />
+              Already Assigned
             </DialogTitle>
             <DialogDescription asChild>
-              <div className="space-y-2 text-sm">
+              <div className="space-y-3 text-sm">
                 <p>
-                  <span className="font-medium">{getTeacher(reassignDialog?.subTeacherId || '')?.name}</span> is currently
-                  assigned for <span className="font-medium">{reassignDialog?.oldPeriod != null ? getPeriodLabel(reassignDialog.oldPeriod, timings) : '?'}</span> (replacing{' '}
-                  <span className="font-medium">{reassignDialog?.oldOriginalTeacher}</span>).
+                  <span className="font-medium">{confirmAssignDialog?.subTeacherName}</span> is already assigned as substitute for:
                 </p>
-                <p>
-                  Do you want to remove that assignment and reassign them for this period (replacing{' '}
-                  <span className="font-medium">{reassignDialog?.newOriginalTeacher}</span>)?
-                </p>
-                <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800 mt-2">
-                  <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
-                  <span className="text-xs text-amber-700 dark:text-amber-300">
-                    {reassignDialog?.oldPeriod != null ? getPeriodLabel(reassignDialog.oldPeriod, timings) : '?'} will become unassigned after this action. You will need to
-                    assign a different substitute for that period.
-                  </span>
-                </div>
+                <ul className="list-disc pl-5 space-y-1 text-xs">
+                  {confirmAssignDialog?.assignedPeriodLabels.map((label, i) => (
+                    <li key={i}>
+                      <span className="font-medium">{label}</span>{" "}
+                      (replacing {confirmAssignDialog?.assignedOriginalTeachers[i]})
+                    </li>
+                  ))}
+                </ul>
+                <p>Do you want to assign them for this period as well?</p>
               </div>
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setReassignDialog(null)}>
+            <Button variant="outline" onClick={() => setConfirmAssignDialog(null)}>
               Cancel
             </Button>
-            <Button
-              variant="destructive"
-              onClick={handleReassign}
-            >
-              <RotateCcw className="h-4 w-4 mr-1" />
-              Remove & Reassign
+            <Button onClick={handleConfirmAssign}>
+              <UserCheck className="h-4 w-4 mr-1" />
+              Yes, Assign
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1200,19 +1175,16 @@ function SubstitutePickerContent({
   options,
   searchQuery,
   onSearchChange,
-  onAssign,
+  onAssignWithCheck,
   onKeepEmpty,
-  onReassignRequest,
-  currentSubId,
   timings,
 }: {
   entry: { id: string; period: number; teacherId: string };
   options: SubOption[];
   searchQuery: string;
   onSearchChange: (q: string) => void;
-  onAssign: (entryId: string, subTeacherId: string) => void;
+  onAssignWithCheck: (entryId: string, opt: SubOption) => void;
   onKeepEmpty: (entryId: string) => void;
-  onReassignRequest: (opt: SubOption) => void;
   currentSubId?: string;
   timings: { days: string[] } & Record<string, unknown>;
 }) {
@@ -1223,9 +1195,6 @@ function SubstitutePickerContent({
       setTimeout(() => searchRef.current?.focus(), 50);
     }
   }, []);
-
-  const availableOptions = options.filter((o) => !o.isAlreadyAssigned);
-  const assignedOptions = options.filter((o) => o.isAlreadyAssigned);
 
   return (
     <>
@@ -1257,71 +1226,48 @@ function SubstitutePickerContent({
         {options.length === 0 ? (
           <p className="text-xs text-muted-foreground text-center py-4">No teachers available for this period.</p>
         ) : (
-          <>
-            {/* Available teachers */}
-            {availableOptions.length > 0 && (
-              <div className="mb-1">
-                <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                  Available
+          <div>
+            {options.map((opt) => (
+              <button
+                key={opt.teacher.id}
+                onClick={() => onAssignWithCheck(entry.id, opt)}
+                className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-sm hover:bg-muted transition-colors text-left cursor-pointer"
+              >
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
+                  opt.isAlreadyAssigned
+                    ? 'bg-blue-100 dark:bg-blue-900/40'
+                    : 'bg-green-100 dark:bg-green-900/40'
+                }`}>
+                  <UserCheck className={`h-3 w-3 ${
+                    opt.isAlreadyAssigned
+                      ? 'text-blue-600 dark:text-blue-400'
+                      : 'text-green-600 dark:text-green-400'
+                  }`} />
                 </div>
-                {availableOptions.map((opt) => (
-                  <button
-                    key={opt.teacher.id}
-                    onClick={() => onAssign(entry.id, opt.teacher.id)}
-                    className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-sm hover:bg-muted transition-colors text-left cursor-pointer"
-                  >
-                    <div className="w-6 h-6 rounded-full bg-green-100 dark:bg-green-900/40 flex items-center justify-center shrink-0">
-                      <UserCheck className="h-3 w-3 text-green-600 dark:text-green-400" />
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium text-xs flex items-center gap-1.5">
+                    {opt.teacher.name}
+                    {opt.isAlreadyAssigned && opt.assignedPeriods.length > 0 && (
+                      <Badge
+                        variant="outline"
+                        className="text-[9px] px-1.5 py-0 h-4 text-blue-600 border-blue-300 bg-blue-50 dark:text-blue-400 dark:border-blue-700 dark:bg-blue-900/30"
+                      >
+                        {opt.assignedPeriods.map((p) => getPeriodLabel(p, timings)).join(', ')}
+                      </Badge>
+                    )}
+                  </div>
+                  {opt.isAlreadyAssigned ? (
+                    <div className="text-[10px] text-blue-600 dark:text-blue-400">
+                      Already assigned for {opt.assignedPeriods.length} period{opt.assignedPeriods.length > 1 ? 's' : ''}
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="font-medium text-xs">{opt.teacher.name}</div>
-                      <div className="text-[10px] text-muted-foreground">{opt.teacher.shortName}</div>
-                    </div>
-                    <Plus className="h-3.5 w-3.5 text-muted-foreground" />
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* Already assigned teachers */}
-            {assignedOptions.length > 0 && (
-              <div>
-                <div className="px-2 py-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider flex items-center gap-1">
-                  <AlertTriangle className="h-3 w-3" />
-                  Already Assigned
+                  ) : (
+                    <div className="text-[10px] text-muted-foreground">{opt.teacher.shortName}</div>
+                  )}
                 </div>
-                {assignedOptions.map((opt) => (
-                  <button
-                    key={opt.teacher.id}
-                    onClick={() => onReassignRequest(opt)}
-                    className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-sm hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors text-left cursor-pointer group"
-                  >
-                    <div className="w-6 h-6 rounded-full bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center shrink-0">
-                      <AlertTriangle className="h-3 w-3 text-amber-600 dark:text-amber-400" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="font-medium text-xs flex items-center gap-1.5">
-                        {opt.teacher.name}
-                        <Badge
-                          variant="outline"
-                          className="text-[9px] px-1.5 py-0 h-4 text-amber-600 border-amber-300 bg-amber-50 dark:text-amber-400 dark:border-amber-700 dark:bg-amber-900/30"
-                        >
-                          {opt.assignedPeriod != null ? getPeriodLabel(opt.assignedPeriod, timings) : '?'}
-                        </Badge>
-                      </div>
-                      <div className="text-[10px] text-amber-600 dark:text-amber-400">
-                        Replacing {opt.assignedOriginalTeacher}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <RotateCcw className="h-3 w-3 text-amber-500" />
-                      <span className="text-[10px] text-amber-600 dark:text-amber-400">Reassign</span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </>
+                <Plus className="h-3.5 w-3.5 text-muted-foreground" />
+              </button>
+            ))}
+          </div>
         )}
       </div>
     </>
