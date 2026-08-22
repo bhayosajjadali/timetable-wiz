@@ -100,6 +100,9 @@ interface SubOption {
   isAlreadyAssigned: boolean;
   assignedPeriods: number[];
   assignedOriginalTeachers: string[];
+  isAssignedSamePeriod: boolean;
+  samePeriodSubId?: string;
+  samePeriodOriginalTeacher?: string;
 }
 
 /* ====================================================================
@@ -118,6 +121,13 @@ function buildSubstituteReportHtml(
   store: ReturnType<typeof useTimetableStore.getState>
 ): string {
   const { entries, teachers, subjects, classes, sections, timings } = store;
+
+  // Format date as dd-mm-yyyy
+  const formatDateDdMmYyyy = (dateStr: string) => {
+    const [year, month, day] = dateStr.split('-');
+    return `${day}-${month}-${year}`;
+  };
+  const formattedDate = formatDateDdMmYyyy(date);
 
   const getTeacher = (id: string) => teachers.find((t) => t.id === id);
   const getSubject = (id: string) => subjects.find((s) => s.id === id);
@@ -148,19 +158,24 @@ function buildSubstituteReportHtml(
     })
     .sort((a, b) => a.period - b.period);
 
+  // Summary stats
+  const totalAbsentTeachers = new Set(substitutes.map((s) => s.originalTeacherId)).size;
+  const totalAssignedPeriods = substitutes.filter((s) => s.substituteTeacherId !== '__KEEP_EMPTY__').length;
+
   // Build table rows with signature column
   let tableRows = '';
   rows.forEach((row, idx) => {
     const rowBg = idx % 2 === 0 ? '#FFFFFF' : '#F8F9FA';
     tableRows += `<tr style="background:${rowBg};">
-      <td style="text-align:center;font-weight:600;width:90px;">${esc(date)}</td>
+      <td style="text-align:center;font-weight:600;width:85px;">${esc(formattedDate)}</td>
       <td style="text-align:center;font-weight:500;">${esc(row.originalTeacher)}</td>
-      <td style="text-align:center;font-weight:600;width:60px;">${row.periodLabel}</td>
+      <td style="text-align:center;font-weight:600;width:55px;">${row.periodLabel}</td>
+      <td style="text-align:center;font-weight:500;">${esc(row.classSection)}</td>
       <td style="text-align:center;font-weight:500;${row.isKeepEmpty ? 'color:#999;font-style:italic;' : ''}">${esc(row.subTeacher)}</td>
-      <td style="width:160px;height:48px;vertical-align:bottom;padding-bottom:6px;">
+      <td style="width:140px;height:48px;vertical-align:bottom;padding-bottom:6px;">
         <div style="border-bottom:1px solid #999;width:85%;margin:0 auto;"></div>
       </td>
-      <td style="width:100px;"></td>
+      <td style="width:90px;"></td>
     </tr>`;
   });
 
@@ -185,6 +200,20 @@ function buildSubstituteReportHtml(
   .school-name { font-size: 20px; font-weight: 700; color: #1B2A4A; letter-spacing: -0.2px; }
   .report-subtitle { font-size: 12px; font-weight: 600; color: #333; margin-top: 2px; }
   .report-day { font-size: 10px; color: #666; margin-top: 1px; }
+
+  .summary-bar {
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    margin-bottom: 8px;
+    padding: 6px 12px;
+    background: #F0F4F8;
+    border-radius: 6px;
+    border: 1px solid #DEE2E6;
+  }
+  .summary-item { text-align: center; }
+  .summary-value { font-size: 18px; font-weight: 700; color: #1B2A4A; }
+  .summary-label { font-size: 9px; color: #666; text-transform: uppercase; letter-spacing: 0.3px; margin-top: 1px; }
 
   .report-table { width: 100%; border-collapse: collapse; margin-top: 2px; }
   .report-table th {
@@ -228,8 +257,19 @@ function buildSubstituteReportHtml(
 <body>
   <div class="report-header">
     <div class="school-name">${esc(schoolName)}</div>
-    <div class="report-subtitle">Substitute Teachers for ${esc(date)}</div>
+    <div class="report-subtitle">Substitute Teachers for ${esc(formattedDate)}</div>
     <div class="report-day">${esc(dayOfWeek)}</div>
+  </div>
+
+  <div class="summary-bar">
+    <div class="summary-item">
+      <div class="summary-value">${totalAbsentTeachers}</div>
+      <div class="summary-label">Absent Teachers</div>
+    </div>
+    <div class="summary-item">
+      <div class="summary-value">${totalAssignedPeriods}</div>
+      <div class="summary-label">Assigned Periods</div>
+    </div>
   </div>
 
   <table class="report-table">
@@ -238,9 +278,10 @@ function buildSubstituteReportHtml(
         <th>Date</th>
         <th>Absent Teacher</th>
         <th>Period</th>
+        <th>Class</th>
         <th>Assigned Teacher</th>
-        <th style="width:160px;">Signature</th>
-        <th style="width:100px;">Remarks</th>
+        <th style="width:140px;">Signature</th>
+        <th style="width:90px;">Remarks</th>
       </tr>
     </thead>
     <tbody>
@@ -394,24 +435,32 @@ export function SubstitutesTab() {
       );
 
       // Teachers already assigned as substitute for THIS SAME period (for any absent teacher)
-      const periodBusySubIds = new Set<string>();
+      const samePeriodAssignments = new Map<string, { subId: string; originalTeacherName: string }>();
       daySubstitutes.forEach((sub) => {
         if (sub.substituteTeacherId === '__KEEP_EMPTY__') return;
-        const entry = entries.find((e) => e.id === sub.entryId);
-        if (entry && entry.period === entryPeriod) {
-          periodBusySubIds.add(sub.substituteTeacherId);
+        const subEntry = entries.find((e) => e.id === sub.entryId);
+        if (subEntry && subEntry.period === entryPeriod) {
+          const origTeacher = teachers.find((t) => t.id === sub.originalTeacherId);
+          samePeriodAssignments.set(sub.substituteTeacherId, {
+            subId: sub.id,
+            originalTeacherName: origTeacher?.name || '?',
+          });
         }
       });
 
       return teachers
-        .filter((t) => !busyTeacherIds.has(t.id) && t.id !== absentTeacherId && !periodBusySubIds.has(t.id))
+        .filter((t) => !busyTeacherIds.has(t.id) && t.id !== absentTeacherId)
         .map((t) => {
           const existingAssignments = substituteAssignmentMap.get(t.id);
+          const samePeriodInfo = samePeriodAssignments.get(t.id);
           return {
             teacher: t,
             isAlreadyAssigned: !!existingAssignments && existingAssignments.length > 0,
             assignedPeriods: existingAssignments?.map((a) => a.period) || [],
             assignedOriginalTeachers: existingAssignments?.map((a) => a.originalTeacherName) || [],
+            isAssignedSamePeriod: !!samePeriodInfo,
+            samePeriodSubId: samePeriodInfo?.subId,
+            samePeriodOriginalTeacher: samePeriodInfo?.originalTeacherName,
           };
         })
         .sort((a, b) => a.teacher.name.localeCompare(b.teacher.name));
@@ -493,6 +542,24 @@ export function SubstitutesTab() {
     setActiveSubPopover(null);
     setSubSearchQuery('');
   }, [confirmAssignDialog, addSubstitute, selectedDate, dayOfWeek, entries, toast]);
+
+  // Handle reassigning a substitute from another absent teacher's same period
+  const handleReassignSubstitute = useCallback(
+    (entryId: string, subTeacherId: string, existingSubId: string) => {
+      deleteSubstitute(existingSubId);
+      const entry = entries.find((e) => e.id === entryId);
+      if (!entry) return;
+      addSubstitute(selectedDate, dayOfWeek, entryId, entry.teacherId, subTeacherId);
+      const subTeacher = getTeacher(subTeacherId);
+      toast({
+        title: 'Substitute reassigned',
+        description: `${subTeacher?.name || 'Teacher'} reassigned to this period. Previous assignment removed.`,
+      });
+      setActiveSubPopover(null);
+      setSubSearchQuery('');
+    },
+    [entries, dayOfWeek, addSubstitute, selectedDate, getTeacher, toast, deleteSubstitute]
+  );
 
   // Handle keeping a period intentionally empty (no substitute)
   const handleRemoveSubstitute = useCallback(
@@ -943,6 +1010,7 @@ export function SubstitutesTab() {
                                               handleAssignSubstitute(entryId, opt.teacher.id);
                                             }
                                           }}
+                                          onReassign={(entryId, opt) => handleReassignSubstitute(entryId, opt.teacher.id, opt.samePeriodSubId!)}
                                           onKeepEmpty={handleKeepEmpty}
                                           currentSubId={sub.id}
                                           timings={timings}
@@ -997,6 +1065,7 @@ export function SubstitutesTab() {
                                             handleAssignSubstitute(entryId, opt.teacher.id);
                                           }
                                         }}
+                                        onReassign={(entryId, opt) => handleReassignSubstitute(entryId, opt.teacher.id, opt.samePeriodSubId!)}
                                         onKeepEmpty={handleKeepEmpty}
                                         timings={timings}
                                       />
@@ -1170,6 +1239,7 @@ function SubstitutePickerContent({
   searchQuery,
   onSearchChange,
   onAssignWithCheck,
+  onReassign,
   onKeepEmpty,
   timings,
 }: {
@@ -1178,6 +1248,7 @@ function SubstitutePickerContent({
   searchQuery: string;
   onSearchChange: (q: string) => void;
   onAssignWithCheck: (entryId: string, opt: SubOption) => void;
+  onReassign: (entryId: string, opt: SubOption) => void;
   onKeepEmpty: (entryId: string) => void;
   currentSubId?: string;
   timings: { days: string[] } & Record<string, unknown>;
@@ -1224,24 +1295,44 @@ function SubstitutePickerContent({
             {options.map((opt) => (
               <button
                 key={opt.teacher.id}
-                onClick={() => onAssignWithCheck(entry.id, opt)}
+                onClick={() => {
+                  if (opt.isAssignedSamePeriod) {
+                    onReassign(entry.id, opt);
+                  } else {
+                    onAssignWithCheck(entry.id, opt);
+                  }
+                }}
                 className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-sm hover:bg-muted transition-colors text-left cursor-pointer"
               >
                 <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
-                  opt.isAlreadyAssigned
-                    ? 'bg-blue-100 dark:bg-blue-900/40'
-                    : 'bg-green-100 dark:bg-green-900/40'
+                  opt.isAssignedSamePeriod
+                    ? 'bg-amber-100 dark:bg-amber-900/40'
+                    : opt.isAlreadyAssigned
+                      ? 'bg-blue-100 dark:bg-blue-900/40'
+                      : 'bg-green-100 dark:bg-green-900/40'
                 }`}>
-                  <UserCheck className={`h-3 w-3 ${
-                    opt.isAlreadyAssigned
-                      ? 'text-blue-600 dark:text-blue-400'
-                      : 'text-green-600 dark:text-green-400'
-                  }`} />
+                  {opt.isAssignedSamePeriod ? (
+                    <AlertTriangle className="h-3 w-3 text-amber-600 dark:text-amber-400" />
+                  ) : (
+                    <UserCheck className={`h-3 w-3 ${
+                      opt.isAlreadyAssigned
+                        ? 'text-blue-600 dark:text-blue-400'
+                        : 'text-green-600 dark:text-green-400'
+                    }`} />
+                  )}
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="font-medium text-xs flex items-center gap-1.5">
                     {opt.teacher.name}
-                    {opt.isAlreadyAssigned && opt.assignedPeriods.length > 0 && (
+                    {opt.isAssignedSamePeriod && (
+                      <Badge
+                        variant="outline"
+                        className="text-[9px] px-1.5 py-0 h-4 text-amber-600 border-amber-300 bg-amber-50 dark:text-amber-400 dark:border-amber-700 dark:bg-amber-900/30"
+                      >
+                        Assigned
+                      </Badge>
+                    )}
+                    {!opt.isAssignedSamePeriod && opt.isAlreadyAssigned && opt.assignedPeriods.length > 0 && (
                       <Badge
                         variant="outline"
                         className="text-[9px] px-1.5 py-0 h-4 text-blue-600 border-blue-300 bg-blue-50 dark:text-blue-400 dark:border-blue-700 dark:bg-blue-900/30"
@@ -1250,7 +1341,11 @@ function SubstitutePickerContent({
                       </Badge>
                     )}
                   </div>
-                  {opt.isAlreadyAssigned ? (
+                  {opt.isAssignedSamePeriod ? (
+                    <div className="text-[10px] text-amber-600 dark:text-amber-400">
+                      Replacing {opt.samePeriodOriginalTeacher} this period — click to reassign
+                    </div>
+                  ) : opt.isAlreadyAssigned ? (
                     <div className="text-[10px] text-blue-600 dark:text-blue-400">
                       Already assigned for {opt.assignedPeriods.length} period{opt.assignedPeriods.length > 1 ? 's' : ''}
                     </div>
@@ -1258,7 +1353,11 @@ function SubstitutePickerContent({
                     <div className="text-[10px] text-muted-foreground">{opt.teacher.shortName}</div>
                   )}
                 </div>
-                <Plus className="h-3.5 w-3.5 text-muted-foreground" />
+                {opt.isAssignedSamePeriod ? (
+                  <ArrowRightLeft className="h-3.5 w-3.5 text-amber-500" />
+                ) : (
+                  <Plus className="h-3.5 w-3.5 text-muted-foreground" />
+                )}
               </button>
             ))}
           </div>
